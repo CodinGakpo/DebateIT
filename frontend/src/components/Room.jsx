@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { 
-  Mic, 
-  MicOff, 
-  PhoneOff, 
+import {
+  Mic,
+  MicOff,
+  PhoneOff,
   Settings,
   MessageSquare,
   Users,
@@ -12,7 +12,7 @@ import {
   Copy,
   Check,
   Send,
-  X
+  X,
 } from "lucide-react";
 import useAudioDetection from "../hooks/useAudioDetection";
 
@@ -22,7 +22,7 @@ export default function Room() {
   const socketRef = useRef(null);
   const chatEndRef = useRef(null);
   const messageInputRef = useRef(null);
-  
+
   const [isMuted, setIsMuted] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -30,68 +30,71 @@ export default function Room() {
   const [message, setMessage] = useState("");
   const [opponentSpeaking, setOpponentSpeaking] = useState(false);
   const [chatMessages, setChatMessages] = useState([
-    { id: 1, sender: "System", text: "Welcome to the debate arena!", timestamp: new Date(), isSystem: true }
+    {
+      id: 1,
+      sender: "System",
+      text: "Welcome to the debate arena!",
+      timestamp: new Date(),
+      isSystem: true,
+    },
   ]);
   const [participants, setParticipants] = useState([]);
   const [selfId, setSelfId] = useState(null);
   const [selfName, setSelfName] = useState("You");
-
 
   // Use audio detection hook
   const isSpeaking = useAudioDetection(isMuted, 30);
 
   useEffect(() => {
     // For Kinde auth, you might want to pass the token in the WebSocket URL
-    // const { getToken } = useKindeAuth(); 
+    // const { getToken } = useKindeAuth();
     // const token = await getToken();
     // socketRef.current = new WebSocket(`ws://localhost:8000/ws/room/${roomCode}/?token=${token}`);
-    
-    socketRef.current = new WebSocket(`ws://localhost:8000/ws/room/${roomCode}/`);
+
+    socketRef.current = new WebSocket(
+      `ws://localhost:8000/ws/room/${roomCode}/`
+    );
 
     socketRef.current.onopen = () => {
-      console.log('WebSocket connected to room:', roomCode);
+      console.log("WebSocket connected to room:", roomCode);
     };
 
     socketRef.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.error("WebSocket error:", error);
     };
 
     socketRef.current.onmessage = (e) => {
-  const data = JSON.parse(e.data);
-  console.log("Received message:", data);
+      const data = JSON.parse(e.data);
+      console.log("Received message:", data);
 
-  if (data.type === "room_state") {
-    // full snapshot from backend
-    setSelfId(data.self.id);
-    setSelfName(data.self.name || "You");
-    setParticipants([data.self, ...data.participants]); // self + everyone already in room
-  } else if (data.type === "participant_joined") {
-    setParticipants((prev) => {
-      if (prev.some((p) => p.id === data.participant.id)) return prev;
-      return [...prev, data.participant];
-    });
-  } else if (data.type === "participant_left") {
-    setParticipants((prev) =>
-      prev.filter((p) => p.id !== data.user_id)
-    );
-    } else if (data.type === "chat_message") {
-    // Messages coming from the server are always from the OTHER person
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        sender: data.sender,       // e.g. "Anonymous"
-        text: data.message,
-        timestamp: new Date(),
-        isSystem: false
-      },
-    ]);
-  }
+      if (data.type === "room_state") {
+        // full snapshot from backend
+        setSelfId(data.self.id);
+        setSelfName(data.self.name || "You");
+        setParticipants([data.self, ...data.participants]); // self + everyone already in room
+      } else if (data.type === "participant_joined") {
+        setParticipants((prev) => {
+          if (prev.some((p) => p.id === data.participant.id)) return prev;
+          return [...prev, data.participant];
+        });
+      } else if (data.type === "participant_left") {
+        setParticipants((prev) => prev.filter((p) => p.id !== data.user_id));
+      } else if (data.type === "chat_message") {
+        // Messages coming from the server are always from the OTHER person
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            sender: data.sender, // e.g. "Anonymous"
+            text: data.message,
+            timestamp: new Date(),
+            isSystem: false,
+          },
+        ]);
+      }
 
-  // ...keep your speaking_status etc.
-};
-
-
+      // ...keep your speaking_status etc.
+    };
 
     return () => {
       if (socketRef.current) {
@@ -107,19 +110,23 @@ export default function Room() {
   // Send speaking status to server when it changes
   useEffect(() => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
-        type: "speaking_status",
-        isSpeaking: isSpeaking
-      }));
+      socketRef.current.send(
+        JSON.stringify({
+          type: "speaking_status",
+          isSpeaking: isSpeaking,
+        })
+      );
     }
   }, [isSpeaking]);
 
   function toggleMute() {
     setIsMuted(!isMuted);
-    socketRef.current?.send(JSON.stringify({
-      type: "toggle_audio",
-      muted: !isMuted
-    }));
+    socketRef.current?.send(
+      JSON.stringify({
+        type: "toggle_audio",
+        muted: !isMuted,
+      })
+    );
   }
 
   function handleLeaveRoom() {
@@ -128,7 +135,7 @@ export default function Room() {
 
   function confirmLeave() {
     socketRef.current?.close();
-    navigate('/');
+    navigate("/");
   }
 
   function copyRoomCode() {
@@ -145,17 +152,19 @@ export default function Room() {
         sender: "You",
         text: message,
         timestamp: new Date(),
-        isSystem: false
+        isSystem: false,
       };
-      
-      setChatMessages(prev => [...prev, newMessage]);
-      
-      socketRef.current?.send(JSON.stringify({
-        type: "chat_message",
-        message: message,
-        // sender: "You"
-      }));
-      
+
+      setChatMessages((prev) => [...prev, newMessage]);
+
+      socketRef.current?.send(
+        JSON.stringify({
+          type: "chat_message",
+          message: message,
+          // sender: "You"
+        })
+      );
+
       setMessage("");
       messageInputRef.current?.focus();
     }
@@ -173,10 +182,15 @@ export default function Room() {
                 <div className="bg-red-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                   <PhoneOff className="w-8 h-8 text-red-400" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Quit Debate?</h3>
-                <p className="text-gray-400">Are you sure you want to leave this debate? Your progress will be lost.</p>
+                <h3 className="text-2xl font-bold text-white mb-2">
+                  Quit Debate?
+                </h3>
+                <p className="text-gray-400">
+                  Are you sure you want to leave this debate? Your progress will
+                  be lost.
+                </p>
               </div>
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowExitModal(false)}
@@ -219,7 +233,11 @@ export default function Room() {
                   className="text-purple-400 hover:text-purple-300 transition-colors"
                   title="Copy room code"
                 >
-                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  {copied ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
@@ -228,16 +246,20 @@ export default function Room() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-3 py-2 border border-purple-500/30">
               <Users className="w-4 h-4 text-purple-400" />
-              <span className="text-white text-sm font-medium">{participants.length}</span>
+              <span className="text-white text-sm font-medium">
+                {participants.length}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Chat Sidebar */}
-      <div className={`fixed top-0 right-0 h-full w-full lg:w-[400px] bg-slate-900 border-l-2 border-purple-500/50 z-40 transform transition-transform duration-300 ease-in-out ${
-        showChat ? 'translate-x-0' : 'translate-x-full'
-      }`}>
+      <div
+        className={`fixed top-0 right-0 h-full w-full lg:w-[400px] bg-slate-900 border-l-2 border-purple-500/50 z-40 transform transition-transform duration-300 ease-in-out ${
+          showChat ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
         <div className="flex flex-col h-full">
           {/* Chat Header */}
           <div className="bg-slate-800 border-b border-purple-500/30 p-4 flex items-center justify-between">
@@ -260,10 +282,10 @@ export default function Room() {
                 key={msg.id}
                 className={`${
                   msg.isSystem
-                    ? 'text-center'
-                    : msg.sender === 'You'
-                    ? 'flex justify-end'
-                    : 'flex justify-start'
+                    ? "text-center"
+                    : msg.sender === "You"
+                    ? "flex justify-end"
+                    : "flex justify-start"
                 }`}
               >
                 {msg.isSystem ? (
@@ -273,15 +295,20 @@ export default function Room() {
                 ) : (
                   <div
                     className={`max-w-[75%] ${
-                      msg.sender === 'You'
-                        ? 'bg-gradient-to-r from-purple-500 to-pink-500'
-                        : 'bg-slate-700'
+                      msg.sender === "You"
+                        ? "bg-gradient-to-r from-purple-500 to-pink-500"
+                        : "bg-slate-700"
                     } rounded-2xl px-4 py-2`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-white">{msg.sender}</span>
+                      <span className="text-xs font-bold text-white">
+                        {msg.sender}
+                      </span>
                       <span className="text-xs text-gray-300">
-                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {msg.timestamp.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </div>
                     <p className="text-white text-sm">{msg.text}</p>
@@ -293,7 +320,10 @@ export default function Room() {
           </div>
 
           {/* Chat Input */}
-          <form onSubmit={sendMessage} className="border-t border-purple-500/30 p-4">
+          <form
+            onSubmit={sendMessage}
+            className="border-t border-purple-500/30 p-4"
+          >
             <div className="flex gap-2">
               <input
                 ref={messageInputRef}
@@ -324,27 +354,74 @@ export default function Room() {
       )}
 
       {/* Main Content Area */}
-      <div className={`max-w-7xl mx-auto px-6 py-8 transition-all duration-300 ${showChat ? 'lg:pr-[450px]' : ''}`}>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Participant Video Feeds */}
-          {participants.map((p) => {
-  const isSelf = p.id === selfId;
-  const displayName = isSelf ? "You" : (p.name || "Anonymous");
+      <div
+        className={`max-w-7xl mx-auto px-6 py-8 transition-all duration-300 ${
+          showChat ? "lg:pr-[450px]" : ""
+        }`}
+      >
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    {/* Participant Video Feeds */}
+    {participants.map((participant) => {
+  const isSelf = participant.id === selfId;
+  const displayName = isSelf ? "You" : (participant.name || "Anonymous");
+  const role = participant.role || "Defender"; // default fallback
+
+  const isChallenger = role === "Challenger";
+  const borderColor = isChallenger ? "border-red-500" : "border-blue-500";
+  const glowColor = isChallenger ? "shadow-red-500/50" : "shadow-blue-500/50";
+  const iconBg = isChallenger
+    ? "bg-gradient-to-br from-red-500 to-rose-500"
+    : "bg-gradient-to-br from-blue-500 to-cyan-500";
 
   return (
-    <div key={p.id} className="...">
-      {/* icon, border, etc. */}
-      <div className="mt-4 flex flex-col items-start">
-        <span className="text-white font-semibold">{displayName}</span>
-        <span className="text-xs text-pink-300 mt-1">
-          {p.role || (isSelf ? "Challenger" : "Defender")}
-        </span>
+    <div
+      key={participant.id}
+      className="relative group rounded-3xl bg-slate-900/80 border border-slate-700/80 overflow-hidden shadow-2xl shadow-black/60"
+    >
+      <div
+        className={`relative overflow-hidden rounded-3xl border-2 ${borderColor} shadow-lg ${glowColor}`}
+        style={{ aspectRatio: "16/9" }}
+      >
+        {/* Video Placeholder */}
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
+          <div className={`w-24 h-24 rounded-full flex items-center justify-center ${iconBg}`}>
+            {isChallenger ? (
+              <Sword className="w-12 h-12 text-white" />
+            ) : (
+              <Shield className="w-12 h-12 text-white" />
+            )}
+          </div>
+        </div>
+
+        {/* Name + Role Overlay */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white font-bold">{displayName}</p>
+              <span
+                className={`text-xs px-2 py-0.5 rounded ${
+                  isChallenger
+                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                    : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                }`}
+              >
+                {role}
+              </span>
+            </div>
+            {isMuted && isSelf && (
+              <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
+                <MicOff className="w-4 h-4 text-red-400" />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 })}
 
-        </div>
+  </div>
+
 
         {/* Debate Info Panel */}
         <div className="relative group mb-8">
@@ -355,8 +432,9 @@ export default function Room() {
               <div className="flex-1">
                 <h3 className="text-white font-bold mb-2">Debate Topic</h3>
                 <p className="text-gray-300 leading-relaxed">
-                  The debate topic will appear here once both participants have joined the room. 
-                  Prepare your arguments and may the best debater win!
+                  The debate topic will appear here once both participants have
+                  joined the room. Prepare your arguments and may the best
+                  debater win!
                 </p>
               </div>
             </div>
@@ -372,12 +450,16 @@ export default function Room() {
             onClick={toggleMute}
             className={`p-4 rounded-full transition-all ${
               isMuted
-                ? 'bg-red-500 hover:bg-red-600 text-white'
-                : 'bg-slate-700 hover:bg-slate-600 text-white'
+                ? "bg-red-500 hover:bg-red-600 text-white"
+                : "bg-slate-700 hover:bg-slate-600 text-white"
             } shadow-lg`}
             title={isMuted ? "Unmute" : "Mute"}
           >
-            {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+            {isMuted ? (
+              <MicOff className="w-6 h-6" />
+            ) : (
+              <Mic className="w-6 h-6" />
+            )}
           </button>
 
           {/* Settings Button */}
@@ -393,8 +475,8 @@ export default function Room() {
             onClick={() => setShowChat(!showChat)}
             className={`p-4 rounded-full transition-all shadow-lg ${
               showChat
-                ? 'bg-purple-500 hover:bg-purple-600 text-white'
-                : 'bg-slate-700 hover:bg-slate-600 text-white'
+                ? "bg-purple-500 hover:bg-purple-600 text-white"
+                : "bg-slate-700 hover:bg-slate-600 text-white"
             }`}
             title="Toggle chat"
           >
@@ -416,9 +498,13 @@ export default function Room() {
           <span className="text-xs text-gray-400 w-14 text-center">
             {isMuted ? "Unmute" : "Mute"}
           </span>
-          <span className="text-xs text-gray-400 w-14 text-center">Settings</span>
+          <span className="text-xs text-gray-400 w-14 text-center">
+            Settings
+          </span>
           <span className="text-xs text-gray-400 w-14 text-center">Chat</span>
-          <span className="text-xs text-gray-400 w-14 text-center ml-4">Leave</span>
+          <span className="text-xs text-gray-400 w-14 text-center ml-4">
+            Leave
+          </span>
         </div>
       </div>
     </div>
