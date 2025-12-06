@@ -4,3 +4,5 @@ djangorestframework-simplejwt
 python-dotenv
 channels
 daphne
+channels-redis
+django-cors-headers
