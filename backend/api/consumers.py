@@ -14,19 +14,14 @@ class RoomConsumer(AsyncWebsocketConsumer):
         self.room_code = self.scope['url_route']['kwargs']['room_code']
         self.room_group_name = f"room_{self.room_code}"
 
-        # self.user = self.scope.get("user")
-        # base_name = getattr(self.user, "email", None) or "Anonymous"
-        # display_name = base_name.split("@")[0] if "@" in base_name else base_name
-
-        # self.user_name = display_name
-        # 🔹 Get email passed from frontend WebSocket
+        # 🔹 Get email passed from frontend WebSocket query string
+        # ws://.../ws/room/ABC123/?email=someone@example.com
         query_string = self.scope.get("query_string", b"").decode()
         params = parse_qs(query_string)
         email = params.get("email", ["Anonymous"])[0]
 
-        # Use full email as backend identity (UI shows “You” locally anyway)
+        # Use email as backend identity (UI will show "You" for self)
         self.user_name = email
-
 
         # track participants for this room
         room_participants = ROOM_PARTICIPANTS.setdefault(self.room_group_name, {})
@@ -46,9 +41,10 @@ class RoomConsumer(AsyncWebsocketConsumer):
         # stable id for this connection
         self.user_id = self.channel_name
 
+        # 👇 IMPORTANT: use self.user_name here, NOT display_name
         self.participant = {
             "id": self.user_id,
-            "name": display_name,
+            "name": self.user_name,
             "role": role,
             "isActive": True,
         }
@@ -87,26 +83,43 @@ class RoomConsumer(AsyncWebsocketConsumer):
         }))
 
     async def disconnect(self, close_code):
+        """
+        Called when the WebSocket closes.
+
+        NOTE: This can be called even if connect() bailed out early
+        (e.g. room full), so we must guard against missing attributes.
+        """
+        room_group = getattr(self, "room_group_name", None)
+        user_id = getattr(self, "user_id", None)
+        user_name = getattr(self, "user_name", None)
+
+        # If we never fully connected / never set these, nothing to clean up
+        if room_group is None or user_id is None:
+            return
+
         # Remove from room participant list
-        room_participants = ROOM_PARTICIPANTS.get(self.room_group_name, {})
-        room_participants.pop(self.user_id, None)
-        if not room_participants:
-            ROOM_PARTICIPANTS.pop(self.room_group_name, None)
+        room_participants = ROOM_PARTICIPANTS.get(room_group, {})
+        room_participants.pop(user_id, None)
+
+        if not room_participants and room_group in ROOM_PARTICIPANTS:
+            ROOM_PARTICIPANTS.pop(room_group, None)
 
         # Notify others that participant left
         await self.channel_layer.group_send(
-            self.room_group_name,
+            room_group,
             {
-                'type': 'participant_left',
-                'user_id': self.user_id,
-                'user_name': self.user_name
-            }
+                "type": "participant_left",
+                "user_id": user_id,
+                "user_name": user_name or "Anonymous",
+            },
         )
 
+        # And leave the channel layer group
         await self.channel_layer.group_discard(
-            self.room_group_name,
-            self.channel_name
+            room_group,
+            self.channel_name,
         )
+
 
 
     async def receive(self, text_data):

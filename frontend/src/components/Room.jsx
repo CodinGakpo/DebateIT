@@ -47,68 +47,92 @@ export default function Room() {
   const isSpeaking = useAudioDetection(isMuted, 30);
 
   useEffect(() => {
-    // For Kinde auth, you might want to pass the token in the WebSocket URL
-    // const { getToken } = useKindeAuth();
-    // const token = await getToken();
-    // socketRef.current = new WebSocket(`ws://localhost:8000/ws/room/${roomCode}/?token=${token}`);
+  if (!roomCode) return;
 
-    const currentUserEmail =
-  localStorage.getItem("debateitUserEmail") || "Anonymous";
+  // get current user email (or Anonymous)
+  const currentUserEmail =
+    localStorage.getItem("debateitUserEmail") || "Anonymous";
 
-const socketRef = new WebSocket(
-  `ws://localhost:8000/ws/room/${roomCode}/?email=${encodeURIComponent(
-    currentUserEmail
-  )}`
-);
+  // close any existing socket first (helps with StrictMode double calls)
+  if (socketRef.current) {
+    try {
+      socketRef.current.close();
+    } catch (e) {
+      console.warn("Error closing existing room socket", e);
+    }
+    socketRef.current = null;
+  }
 
+  // create a new WebSocket
+  const socket = new WebSocket(
+    `ws://localhost:8000/ws/room/${roomCode}/?email=${encodeURIComponent(
+      currentUserEmail
+    )}`
+  );
 
-    socketRef.current.onopen = () => {
-      console.log("WebSocket connected to room:", roomCode);
-    };
+  // store it in the ref
+  socketRef.current = socket;
 
-    socketRef.current.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
+  // now attach handlers on the *local* socket variable
+  socket.onopen = () => {
+    console.log("Room socket connected");
+  };
 
-    socketRef.current.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      console.log("Received message:", data);
+  socket.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    console.log("Received message:", data);
 
-      if (data.type === "room_state") {
-        // full snapshot from backend
-        setSelfId(data.self.id);
-        setSelfName(data.self.name || "You");
-        setParticipants([data.self, ...data.participants]); // self + everyone already in room
-      } else if (data.type === "participant_joined") {
-        setParticipants((prev) => {
-          if (prev.some((p) => p.id === data.participant.id)) return prev;
-          return [...prev, data.participant];
-        });
-      } else if (data.type === "participant_left") {
-        setParticipants((prev) => prev.filter((p) => p.id !== data.user_id));
-      } else if (data.type === "chat_message") {
-        // Messages coming from the server are always from the OTHER person
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now(),
-            sender: data.sender, // e.g. "Anonymous"
-            text: data.message,
-            timestamp: new Date(),
-            isSystem: false,
-          },
-        ]);
+    if (data.type === "room_state") {
+      setSelfId(data.self.id);
+      setParticipants([data.self, ...data.participants]);
+    } else if (data.type === "participant_joined") {
+      setParticipants((prev) => {
+        if (prev.some((p) => p.id === data.participant.id)) return prev;
+        return [...prev, data.participant];
+      });
+    } else if (data.type === "participant_left") {
+      setParticipants((prev) =>
+        prev.filter((p) => p.id !== data.user_id)
+      );
+    } else if (data.type === "chat_message") {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          sender: data.sender, // opponent’s email
+          text: data.message,
+          timestamp: new Date(),
+          isSystem: false,
+        },
+      ]);
+    } else if (data.type === "audio_status") {
+      setIsOpponentMuted(data.muted);
+    } else if (data.type === "speaking_status") {
+      if (data.user_id === "opponent") {
+        setIsOpponentSpeaking(data.isSpeaking);
       }
+    }
+  };
 
-      // ...keep your speaking_status etc.
-    };
+  socket.onclose = () => {
+    console.log("Room socket closed");
+  };
 
-    return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-    };
-  }, [roomCode]);
+  socket.onerror = (err) => {
+    console.error("Room socket error", err);
+  };
+
+  // cleanup on unmount / room change
+  return () => {
+    try {
+      socket.close();
+    } catch (e) {
+      console.warn("Error closing room socket on cleanup", e);
+    }
+    socketRef.current = null;
+  };
+}, [roomCode]);
+
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
