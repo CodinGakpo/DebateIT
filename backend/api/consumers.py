@@ -2,6 +2,8 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 import random
 import string
+from urllib.parse import parse_qs
+
 
 # ---------------------------
 # ROOM CONSUMER
@@ -12,11 +14,19 @@ class RoomConsumer(AsyncWebsocketConsumer):
         self.room_code = self.scope['url_route']['kwargs']['room_code']
         self.room_group_name = f"room_{self.room_code}"
 
-        self.user = self.scope.get("user")
-        base_name = getattr(self.user, "email", None) or "Anonymous"
-        display_name = base_name.split("@")[0] if "@" in base_name else base_name
+        # self.user = self.scope.get("user")
+        # base_name = getattr(self.user, "email", None) or "Anonymous"
+        # display_name = base_name.split("@")[0] if "@" in base_name else base_name
 
-        self.user_name = display_name
+        # self.user_name = display_name
+        # 🔹 Get email passed from frontend WebSocket
+        query_string = self.scope.get("query_string", b"").decode()
+        params = parse_qs(query_string)
+        email = params.get("email", ["Anonymous"])[0]
+
+        # Use full email as backend identity (UI shows “You” locally anyway)
+        self.user_name = email
+
 
         # track participants for this room
         room_participants = ROOM_PARTICIPANTS.setdefault(self.room_group_name, {})

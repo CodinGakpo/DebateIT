@@ -29,7 +29,7 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                 <Swords className="w-6 h-6 text-white" />
               </div>
               <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Debate Arena
+                DebateIt
               </span>
             </div>
 

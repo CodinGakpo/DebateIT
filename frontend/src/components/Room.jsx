@@ -17,6 +17,7 @@ import {
 import useAudioDetection from "../hooks/useAudioDetection";
 
 export default function Room() {
+  
   const { roomCode } = useParams();
   const navigate = useNavigate();
   const socketRef = useRef(null);
@@ -51,9 +52,15 @@ export default function Room() {
     // const token = await getToken();
     // socketRef.current = new WebSocket(`ws://localhost:8000/ws/room/${roomCode}/?token=${token}`);
 
-    socketRef.current = new WebSocket(
-      `ws://localhost:8000/ws/room/${roomCode}/`
-    );
+    const currentUserEmail =
+  localStorage.getItem("debateitUserEmail") || "Anonymous";
+
+const socketRef = new WebSocket(
+  `ws://localhost:8000/ws/room/${roomCode}/?email=${encodeURIComponent(
+    currentUserEmail
+  )}`
+);
+
 
     socketRef.current.onopen = () => {
       console.log("WebSocket connected to room:", roomCode);
