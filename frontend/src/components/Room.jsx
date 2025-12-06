@@ -32,9 +32,10 @@ export default function Room() {
   const [chatMessages, setChatMessages] = useState([
     { id: 1, sender: "System", text: "Welcome to the debate arena!", timestamp: new Date(), isSystem: true }
   ]);
-  const [participants, setParticipants] = useState([
-    { id: 1, name: "You", role: "Challenger", isActive: true },
-  ]);
+  const [participants, setParticipants] = useState([]);
+  const [selfId, setSelfId] = useState(null);
+  const [selfName, setSelfName] = useState("You");
+
 
   // Use audio detection hook
   const isSpeaking = useAudioDetection(isMuted, 30);
@@ -56,48 +57,41 @@ export default function Room() {
     };
 
     socketRef.current.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      console.log('Received message:', data);
-      
-      if (data.type === "participant_joined") {
-        setParticipants(prev => {
-          // Avoid duplicates
-          if (prev.some(p => p.id === data.participant.id)) {
-            return prev;
-          }
-          return [...prev, data.participant];
-        });
-        setChatMessages(prev => [...prev, {
-          id: Date.now(),
-          sender: "System",
-          text: `${data.participant.name} has joined the debate`,
-          timestamp: new Date(),
-          isSystem: true
-        }]);
-      } else if (data.type === "participant_left") {
-        setParticipants(prev => prev.filter(p => p.id !== data.user_id));
-        setChatMessages(prev => [...prev, {
-          id: Date.now(),
-          sender: "System",
-          text: `${data.user_name} has left the debate`,
-          timestamp: new Date(),
-          isSystem: true
-        }]);
-      } else if (data.type === "chat_message") {
-        setChatMessages(prev => [...prev, {
-          id: Date.now(),
-          sender: data.sender,
-          text: data.message,
-          timestamp: new Date(),
-          isSystem: false
-        }]);
-      } else if (data.type === "speaking_status") {
-        // Update speaking status for participants
-        if (data.user_id === "opponent") {
-          setOpponentSpeaking(data.isSpeaking);
-        }
-      }
-    };
+  const data = JSON.parse(e.data);
+  console.log("Received message:", data);
+
+  if (data.type === "room_state") {
+    // full snapshot from backend
+    setSelfId(data.self.id);
+    setSelfName(data.self.name || "You");
+    setParticipants([data.self, ...data.participants]); // self + everyone already in room
+  } else if (data.type === "participant_joined") {
+    setParticipants((prev) => {
+      if (prev.some((p) => p.id === data.participant.id)) return prev;
+      return [...prev, data.participant];
+    });
+  } else if (data.type === "participant_left") {
+    setParticipants((prev) =>
+      prev.filter((p) => p.id !== data.user_id)
+    );
+    } else if (data.type === "chat_message") {
+    // Messages coming from the server are always from the OTHER person
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        sender: data.sender,       // e.g. "Anonymous"
+        text: data.message,
+        timestamp: new Date(),
+        isSystem: false
+      },
+    ]);
+  }
+
+  // ...keep your speaking_status etc.
+};
+
+
 
     return () => {
       if (socketRef.current) {
@@ -159,7 +153,7 @@ export default function Room() {
       socketRef.current?.send(JSON.stringify({
         type: "chat_message",
         message: message,
-        sender: "You"
+        // sender: "You"
       }));
       
       setMessage("");
@@ -333,65 +327,23 @@ export default function Room() {
       <div className={`max-w-7xl mx-auto px-6 py-8 transition-all duration-300 ${showChat ? 'lg:pr-[450px]' : ''}`}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Participant Video Feeds */}
-          {participants.map((participant, index) => (
-            <div key={participant.id} className="relative group">
-              <div className={`absolute inset-0 rounded-2xl blur-xl transition-opacity duration-300 ${
-                index === 0 
-                  ? (isSpeaking ? 'opacity-100 animate-pulse' : 'opacity-50')
-                  : (opponentSpeaking ? 'opacity-100 animate-pulse' : 'opacity-50')
-              } ${
-                index === 0 ? 'bg-gradient-to-r from-red-500 to-rose-500' : 'bg-gradient-to-r from-blue-500 to-cyan-500'
-              }`}></div>
-              
-              <div className={`relative bg-slate-800/90 backdrop-blur-sm rounded-2xl border-2 overflow-hidden transition-all duration-300 ${
-                index === 0 
-                  ? (isSpeaking ? 'border-red-400 shadow-lg shadow-red-500/50' : 'border-red-500')
-                  : (opponentSpeaking ? 'border-blue-400 shadow-lg shadow-blue-500/50' : 'border-blue-500')
-              }`} style={{ aspectRatio: '16/9' }}>
-                {/* Video Placeholder */}
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
-                  <div className={`w-24 h-24 rounded-full flex items-center justify-center ${
-                    index === 0 
-                      ? 'bg-gradient-to-br from-red-500 to-rose-500' 
-                      : 'bg-gradient-to-br from-blue-500 to-cyan-500'
-                  }`}>
-                    {index === 0 ? (
-                      <Shield className="w-12 h-12 text-white" />
-                    ) : (
-                      <Sword className="w-12 h-12 text-white" />
-                    )}
-                  </div>
-                </div>
+          {participants.map((p) => {
+  const isSelf = p.id === selfId;
+  const displayName = isSelf ? "You" : (p.name || "Anonymous");
 
-                {/* Participant Info Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-white font-bold">{participant.name}</p>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          index === 0 
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
-                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        }`}>
-                          {participant.role}
-                        </span>
-                      </div>
-                    </div>
-                    {participant.isActive && (
-                      <div className="flex items-center gap-2">
-                        {isMuted && participant.name === "You" && (
-                          <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
-                            <MicOff className="w-4 h-4 text-red-400" />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+  return (
+    <div key={p.id} className="...">
+      {/* icon, border, etc. */}
+      <div className="mt-4 flex flex-col items-start">
+        <span className="text-white font-semibold">{displayName}</span>
+        <span className="text-xs text-pink-300 mt-1">
+          {p.role || (isSelf ? "Challenger" : "Defender")}
+        </span>
+      </div>
+    </div>
+  );
+})}
+
         </div>
 
         {/* Debate Info Panel */}

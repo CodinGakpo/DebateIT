@@ -6,47 +6,83 @@ import string
 # ---------------------------
 # ROOM CONSUMER
 # ---------------------------
+ROOM_PARTICIPANTS = {}
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_code = self.scope['url_route']['kwargs']['room_code']
         self.room_group_name = f"room_{self.room_code}"
-        
-        # Get user from scope (Kinde auth middleware should populate this)
-        self.user = self.scope.get('user')
-        
-        # Optional: Require authentication
-        # if not self.user or not self.user.is_authenticated:
-        #     await self.close()
-        #     return
-        
-        # Set user identifier
-        self.user_name = getattr(self.user, 'email', 'Anonymous') if self.user else 'Anonymous'
-        self.user_id = self.channel_name  # Use channel name as unique ID
 
-        # Join room group
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
+        self.user = self.scope.get("user")
+        base_name = getattr(self.user, "email", None) or "Anonymous"
+        display_name = base_name.split("@")[0] if "@" in base_name else base_name
 
+        self.user_name = display_name
+
+        # track participants for this room
+        room_participants = ROOM_PARTICIPANTS.setdefault(self.room_group_name, {})
+        num = len(room_participants)
+
+        # ✅ max 2 participants
+        if num >= 2:
+            await self.close(code=4001)
+            return
+
+        # ✅ assign role based on join order
+        if num == 0:
+            role = "Challenger"
+        else:
+            role = "Defender"
+
+        # stable id for this connection
+        self.user_id = self.channel_name
+
+        self.participant = {
+            "id": self.user_id,
+            "name": display_name,
+            "role": role,
+            "isActive": True,
+        }
+
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        # Notify others that a participant joined
+        # send full room state to THIS client only
+        await self.send(json.dumps({
+            "type": "room_state",
+            "self": self.participant,
+            "participants": list(room_participants.values()),
+        }))
+
+        # add to room list
+        room_participants[self.user_id] = self.participant
+
+        # tell others that someone joined
         await self.channel_layer.group_send(
             self.room_group_name,
             {
-                'type': 'participant_joined',
-                'participant': {
-                    'id': self.user_id,
-                    'name': self.user_name.split('@')[0] if '@' in self.user_name else self.user_name,
-                    'role': 'Defender',
-                    'isActive': True
-                },
-                'skip_sender': self.channel_name
-            }
+                "type": "participant_joined",
+                "participant": self.participant,
+                "sender_channel": self.channel_name,
+            },
         )
 
+    async def participant_joined(self, event):
+        # ignore our own join event (we already know about ourselves)
+        if event.get("sender_channel") == self.channel_name:
+            return
+
+        await self.send(json.dumps({
+            "type": "participant_joined",
+            "participant": event["participant"],
+        }))
+
     async def disconnect(self, close_code):
+        # Remove from room participant list
+        room_participants = ROOM_PARTICIPANTS.get(self.room_group_name, {})
+        room_participants.pop(self.user_id, None)
+        if not room_participants:
+            ROOM_PARTICIPANTS.pop(self.room_group_name, None)
+
         # Notify others that participant left
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -56,12 +92,12 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 'user_name': self.user_name
             }
         )
-        
-        # Leave room group
+
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
+
 
     async def receive(self, text_data):
         data = json.loads(text_data)
@@ -74,7 +110,8 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 {
                     'type': 'chat_message_handler',
                     'message': data.get('message'),
-                    'sender': data.get('sender', self.user_name),
+                    # ✅ always use backend name, ignore client "sender"
+                    'sender': self.user_name,
                     'sender_id': self.user_id
                 }
             )
