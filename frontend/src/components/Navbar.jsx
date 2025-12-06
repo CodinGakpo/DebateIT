@@ -1,12 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, X, Swords, User, LogOut, Trophy, Medal, Flame } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import {
+  Menu,
+  X,
+  Swords,
+  User,
+  LogOut,
+  Trophy,
+  Medal,
+  Flame,
+} from "lucide-react";
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
 
 export default function Navbar({ onProfileToggle, isProfileOpen }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { login, logout, user, isLoading, isAuthenticated } = useKindeAuth();
 
-    useEffect(() => {
+  useEffect(() => {
     if (isAuthenticated && user?.email) {
       // Save the logged-in user's email for the Room page
       localStorage.setItem("debateitUserEmail", user.email);
@@ -40,20 +49,29 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
               </span>
             </div>
 
-            {/* Desktop Navigation */}
+            {/* Desktop Navigation
             {isAuthenticated && (
               <div className="hidden md:flex items-center space-x-8">
-                <a href="#arena" className="text-gray-300 hover:text-purple-400 transition-colors">
+                <a
+                  href="#arena"
+                  className="text-gray-300 hover:text-purple-400 transition-colors"
+                >
                   Arena
                 </a>
-                <a href="#leaderboard" className="text-gray-300 hover:text-purple-400 transition-colors">
+                <a
+                  href="#leaderboard"
+                  className="text-gray-300 hover:text-purple-400 transition-colors"
+                >
                   Leaderboard
                 </a>
-                <a href="#about" className="text-gray-300 hover:text-purple-400 transition-colors">
+                <a
+                  href="#about"
+                  className="text-gray-300 hover:text-purple-400 transition-colors"
+                >
                   About
                 </a>
               </div>
-            )}
+            )} */}
 
             {/* User Section */}
             <div className="flex items-center space-x-4">
@@ -61,23 +79,25 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                 <>
                   <div className="hidden md:flex items-center space-x-3">
                     <span className="text-gray-400 text-sm">Hello,</span>
-                    <span className="text-white font-medium">{user?.given_name || user?.email}</span>
+                    <span className="text-white font-medium">
+                      {user?.given_name || user?.email}
+                    </span>
                   </div>
                   <button
                     onClick={onProfileToggle}
                     className={`p-2 rounded-lg transition-all ${
-                      isProfileOpen 
-                        ? 'bg-purple-600 text-white' 
-                        : 'bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white'
+                      isProfileOpen
+                        ? "bg-purple-600 text-white"
+                        : "bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white"
                     }`}
                   >
                     <User className="w-5 h-5" />
                   </button>
                   <button
                     onClick={() => {
-    localStorage.removeItem("debateitUserEmail");
-    logout();
-  }}
+                      localStorage.removeItem("debateitUserEmail");
+                      logout();
+                    }}
                     className="hidden md:block p-2 text-gray-400 hover:text-red-400 transition-colors"
                     title="Logout"
                   >
@@ -99,7 +119,11 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                   onClick={() => setIsMenuOpen(!isMenuOpen)}
                   className="md:hidden text-gray-300 hover:text-purple-400"
                 >
-                  {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                  {isMenuOpen ? (
+                    <X className="w-6 h-6" />
+                  ) : (
+                    <Menu className="w-6 h-6" />
+                  )}
                 </button>
               )}
             </div>
@@ -112,22 +136,33 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
             <div className="px-4 py-4 space-y-3">
               <div className="flex items-center space-x-3 pb-3 border-b border-purple-500/30">
                 <User className="w-5 h-5 text-purple-400" />
-                <span className="text-white font-medium">{user?.given_name || user?.email}</span>
+                <span className="text-white font-medium">
+                  {user?.given_name || user?.email}
+                </span>
               </div>
-              <a href="#arena" className="block text-gray-300 hover:text-purple-400 transition-colors py-2">
+              <a
+                href="#arena"
+                className="block text-gray-300 hover:text-purple-400 transition-colors py-2"
+              >
                 Arena
               </a>
-              <a href="#leaderboard" className="block text-gray-300 hover:text-purple-400 transition-colors py-2">
+              <a
+                href="#leaderboard"
+                className="block text-gray-300 hover:text-purple-400 transition-colors py-2"
+              >
                 Leaderboard
               </a>
-              <a href="#about" className="block text-gray-300 hover:text-purple-400 transition-colors py-2">
+              <a
+                href="#about"
+                className="block text-gray-300 hover:text-purple-400 transition-colors py-2"
+              >
                 About
               </a>
               <button
                 onClick={() => {
-    localStorage.removeItem("debateitUserEmail");
-    logout();
-  }}
+                  localStorage.removeItem("debateitUserEmail");
+                  logout();
+                }}
                 className="w-full text-left text-red-400 hover:text-red-300 transition-colors py-2"
               >
                 Logout
@@ -141,7 +176,7 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
       {isAuthenticated && (
         <div
           className={`fixed top-16 right-0 h-[calc(100vh-4rem)] bg-slate-900/98 backdrop-blur-sm border-l border-purple-500/30 z-40 transform transition-transform duration-300 ease-in-out overflow-y-auto ${
-            isProfileOpen ? 'translate-x-0' : 'translate-x-full'
+            isProfileOpen ? "translate-x-0" : "translate-x-full"
           } w-full md:w-96`}
         >
           <div className="p-6">
@@ -151,9 +186,11 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                 <User className="w-12 h-12 text-white" />
               </div>
               <h2 className="text-2xl font-bold text-white mb-1">
-                {user?.given_name || 'Gladiator'}
+                {user?.given_name || "Gladiator"}
               </h2>
-              <p className="text-gray-400 text-sm">@{user?.email?.split('@')[0] || 'debater'}</p>
+              <p className="text-gray-400 text-sm">
+                @{user?.email?.split("@")[0] || "debater"}
+              </p>
             </div>
 
             {/* League Info */}
@@ -177,7 +214,10 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                   <span className="text-purple-400 font-medium">67%</span>
                 </div>
                 <div className="w-full bg-slate-700 rounded-full h-2">
-                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full" style={{ width: '67%' }}></div>
+                  <div
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
+                    style={{ width: "67%" }}
+                  ></div>
                 </div>
               </div>
             </div>
