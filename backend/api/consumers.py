@@ -3,6 +3,9 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 import random
 import string
 from urllib.parse import parse_qs
+from channels.db import database_sync_to_async
+from .models import DebateRoom
+
 
 
 # ---------------------------
@@ -14,55 +17,53 @@ class RoomConsumer(AsyncWebsocketConsumer):
         self.room_code = self.scope['url_route']['kwargs']['room_code']
         self.room_group_name = f"room_{self.room_code}"
 
-        # 🔹 Get email passed from frontend WebSocket query string
-        # ws://.../ws/room/ABC123/?email=someone@example.com
+        # --- Extract email from query parameters ---
         query_string = self.scope.get("query_string", b"").decode()
         params = parse_qs(query_string)
         email = params.get("email", ["Anonymous"])[0]
+        self.user_name = email  # backend identity
 
-        # Use email as backend identity (UI will show "You" for self)
-        self.user_name = email
+        # --- Register participant in DB (creates/updates DebateRoom) ---
+        room, role = await register_participant(self.room_code, email)
 
-        # track participants for this room
-        room_participants = ROOM_PARTICIPANTS.setdefault(self.room_group_name, {})
-        num = len(room_participants)
-
-        # ✅ max 2 participants
-        if num >= 2:
-            await self.close(code=4001)
+        if role is None:  # room already has 2 distinct players
+            await self.close()
             return
 
-        # ✅ assign role based on join order
-        if num == 0:
-            role = "Challenger"
-        else:
-            role = "Defender"
+        self.user_role = role
+        self.user_id = self.channel_name  # stable ID
 
-        # stable id for this connection
-        self.user_id = self.channel_name
+        # --- Track participants per room in memory ---
+        room_participants = ROOM_PARTICIPANTS.setdefault(self.room_group_name, {})
 
-        # 👇 IMPORTANT: use self.user_name here, NOT display_name
+        # Add participant data before sending room state
         self.participant = {
             "id": self.user_id,
             "name": self.user_name,
-            "role": role,
+            "role": self.user_role,  # 🟢 from DB, not join order
             "isActive": True,
         }
 
+        # Prevent over 2 participants
+        if len(room_participants) >= 2 and self.user_id not in room_participants:
+            await self.close(code=4001)
+            return
+
+        # Join channel group and accept WebSocket
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        # send full room state to THIS client only
+        # --- Send full room state to THIS user ---
         await self.send(json.dumps({
             "type": "room_state",
             "self": self.participant,
             "participants": list(room_participants.values()),
         }))
 
-        # add to room list
+        # Add to memory AFTER sending local state
         room_participants[self.user_id] = self.participant
 
-        # tell others that someone joined
+        # --- Announce join to others ---
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -71,16 +72,6 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 "sender_channel": self.channel_name,
             },
         )
-
-    async def participant_joined(self, event):
-        # ignore our own join event (we already know about ourselves)
-        if event.get("sender_channel") == self.channel_name:
-            return
-
-        await self.send(json.dumps({
-            "type": "participant_joined",
-            "participant": event["participant"],
-        }))
 
     async def disconnect(self, close_code):
         """
@@ -164,13 +155,12 @@ class RoomConsumer(AsyncWebsocketConsumer):
 
     # Handler for participant_joined
     async def participant_joined(self, event):
-        # Don't send to self
-        if event.get('skip_sender') == self.channel_name:
+        if event.get("sender_channel") == self.channel_name:
             return
-            
+
         await self.send(text_data=json.dumps({
-            'type': 'participant_joined',
-            'participant': event['participant']
+            "type": "participant_joined",
+            "participant": event["participant"]
         }))
 
     # Handler for participant_left
@@ -271,3 +261,33 @@ class MatchmakingConsumer(AsyncWebsocketConsumer):
             "status": "matched",
             "room_code": event["room_code"],
         }))
+
+@database_sync_to_async
+def register_participant(room_code, email):
+    """
+    Ensure a DebateRoom row exists and decide this user's role.
+    Returns (room, role) where role is 'Challenger' or 'Defender',
+    or None if room is already full.
+    """
+    room, created = DebateRoom.objects.get_or_create(
+        room_code=room_code,
+        defaults={
+            "attacker_email": email,  # first person becomes attacker
+            "defender_email": "",
+        },
+    )
+
+    # same user reconnecting
+    if room.attacker_email == email:
+        return room, "Challenger"
+    if room.defender_email == email:
+        return room, "Defender"
+
+    # new user joining – fill defender slot if free
+    if not room.defender_email:
+        room.defender_email = email
+        room.save(update_fields=["defender_email"])
+        return room, "Defender"
+
+    # room already has 2 distinct users
+    return room, None

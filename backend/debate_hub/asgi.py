@@ -1,22 +1,21 @@
 import os
-from django.core.asgi import get_asgi_application
+import django
+
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 from channels.security.websocket import AllowedHostsOriginValidator
-from api.routing import websocket_urlpatterns
-# Import the Kinde middleware if you created it
-# from api.middleware import KindeAuthMiddleware
+from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'debate_hub.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "debate_hub.settings")
+django.setup()
+from api.routing import websocket_urlpatterns
+django_asgi_app = get_asgi_application()
 
 application = ProtocolTypeRouter({
-    "http": get_asgi_application(),
+    "http": django_asgi_app,
     "websocket": AllowedHostsOriginValidator(
         AuthMiddlewareStack(
-            # If using Kinde middleware, wrap it here:
-            # KindeAuthMiddleware(
-                URLRouter(websocket_urlpatterns)
-            # )
+            URLRouter(websocket_urlpatterns)
         )
     ),
 })

@@ -7,7 +7,18 @@ from .kinde_auth import verify_kinde_jwt
 from .models import UserProfile, DebateRoom, DebateTurn
 from .serializers import DebateTurnSerializer
 
+import json
+import random
+import string
 
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+def generate_room_code(length=6):
+    while True:
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
+        if not DebateRoom.objects.filter(room_code=code).exists():
+            return code
 class ProtectedView(APIView):
     def get(self, request):
         payload = verify_kinde_jwt(request)
@@ -107,3 +118,75 @@ class GetRoomTurnsView(APIView):
         serialized = DebateTurnSerializer(turns, many=True)
 
         return Response({"turns": serialized.data})
+
+@csrf_exempt
+def create_room(request):
+    """Create a new room where the current user is the attacker."""
+    if request.method != "POST":
+        return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+        email = body["email"]
+    except (json.JSONDecodeError, KeyError):
+        return JsonResponse({"detail": "Invalid JSON or missing email"}, status=400)
+
+    room_code = generate_room_code()
+
+    room = DebateRoom.objects.create(
+        room_code=room_code,
+        attacker_email=email,
+        defender_email="",   # empty for now
+    )
+
+    return JsonResponse(
+        {
+            "roomCode": room.room_code,
+            "attackerEmail": room.attacker_email,
+            "defenderEmail": room.defender_email,
+            "winnerEmail": room.winner_email,
+            "youAre": "ATTACKER",
+        }
+    )
+
+
+@csrf_exempt
+def join_room(request, room_code):
+    """Join an existing room; fills defender_email if empty."""
+    if request.method != "POST":
+        return JsonResponse({"detail": "Method not allowed"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+        email = body["email"]
+    except (json.JSONDecodeError, KeyError):
+        return JsonResponse({"detail": "Invalid JSON or missing email"}, status=400)
+
+    try:
+        room = DebateRoom.objects.get(room_code=room_code)
+    except DebateRoom.DoesNotExist:
+        return JsonResponse({"detail": "Room not found"}, status=404)
+
+    # If this user is already in the room, just treat as reconnect
+    if email == room.attacker_email:
+        you_are = "ATTACKER"
+    elif email == room.defender_email:
+        you_are = "DEFENDER"
+    else:
+        # New user joining
+        if not room.defender_email:
+            room.defender_email = email
+            room.save(update_fields=["defender_email"])
+            you_are = "DEFENDER"
+        else:
+            return JsonResponse({"detail": "Room already full"}, status=400)
+
+    return JsonResponse(
+        {
+            "roomCode": room.room_code,
+            "attackerEmail": room.attacker_email,
+            "defenderEmail": room.defender_email,
+            "winnerEmail": room.winner_email,
+            "youAre": you_are,
+        }
+    )
