@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu, X, Swords, User, LogOut, Trophy, Medal, Flame } from 'lucide-react';
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
 
 export default function Navbar({ onProfileToggle, isProfileOpen }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { login, logout, user, isLoading, isAuthenticated } = useKindeAuth();
+
+    useEffect(() => {
+    if (isAuthenticated && user?.email) {
+      // Save the logged-in user's email for the Room page
+      localStorage.setItem("debateitUserEmail", user.email);
+    }
+  }, [isAuthenticated, user]);
 
   if (isLoading) {
     return (
@@ -67,7 +74,10 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                     <User className="w-5 h-5" />
                   </button>
                   <button
-                    onClick={logout}
+                    onClick={() => {
+    localStorage.removeItem("debateitUserEmail");
+    logout();
+  }}
                     className="hidden md:block p-2 text-gray-400 hover:text-red-400 transition-colors"
                     title="Logout"
                   >
@@ -114,7 +124,10 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                 About
               </a>
               <button
-                onClick={logout}
+                onClick={() => {
+    localStorage.removeItem("debateitUserEmail");
+    logout();
+  }}
                 className="w-full text-left text-red-400 hover:text-red-300 transition-colors py-2"
               >
                 Logout
