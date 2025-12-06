@@ -1,10 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework import status
+from rest_framework.permissions import AllowAny
 from django.contrib.auth.models import User
 from .kinde_auth import verify_kinde_jwt
 from .models import UserProfile, DebateRoom, DebateTurn
+from .serializers import DebateTurnSerializer
 
 
 class ProtectedView(APIView):
@@ -88,3 +89,21 @@ class SaveTurnView(APIView):
             "speaker": speaker.id,
             "text": text,
         })
+
+class GetRoomTurnsView(APIView):
+
+    def get(self, request):
+        room_code = request.query_params.get("room_code")
+
+        if not room_code:
+            return Response({"error": "room_code is required"}, status=400)
+
+        try:
+            room = DebateRoom.objects.get(room_code=room_code)
+        except DebateRoom.DoesNotExist:
+            return Response({"error": "Room not found"}, status=404)
+
+        turns = DebateTurn.objects.filter(room=room).order_by("turn_number")
+        serialized = DebateTurnSerializer(turns, many=True)
+
+        return Response({"turns": serialized.data})

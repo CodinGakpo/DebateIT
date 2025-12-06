@@ -4,5 +4,4 @@ from .models import DebateTurn
 class DebateTurnSerializer(serializers.ModelSerializer):
     class Meta:
         model = DebateTurn
-        fields = ["id", "room", "speaker", "text", "timestamp"]
-        read_only_fields = ["id", "timestamp"]
+        fields = ["id", "room", "speaker", "text", "turn_number", "timestamp"]
