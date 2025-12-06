@@ -1,19 +1,21 @@
+// src/App.jsx
+import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Navbar from './components/Navbar';
-import ProtectedRoute from './components/ProtectedRoute';
-import Home from './components/Home';
-import Dashboard from './components/Dashboard';
-import Room from './components/Room'
-import CreateJoin from './components/CreateJoin'
 
-function App() {
+import ProtectedRoute from "./components/ProtectedRoute";
+import Landing from "./components/Landing";
+import Dashboard from "./components/Dashboard";
+import Room from "./components/Room";
+import CreateJoin from "./components/CreateJoin";
+
+export default function App() {
   return (
     <BrowserRouter>
-      <Navbar />
-
       <Routes>
-        {/* Initial page with login button */}
-        <Route path="/" element={<Home />} />
+        {/* Landing with navbar inside it */}
+        <Route path="/" element={<Landing />} />
+
+        {/* Public routes */}
         <Route path="/room/:roomCode" element={<Room />} />
         <Route path="/create-join" element={<CreateJoin />} />
 
@@ -30,5 +32,3 @@ function App() {
     </BrowserRouter>
   );
 }
-
-export default App;

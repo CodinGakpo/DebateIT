@@ -15,7 +15,7 @@ export default function CreateJoin() {
   }
 
   return (
-    <div>
+    <div className="text-5xl">
       <h1>Create or Join Room</h1>
 
       <button onClick={createRoom}>Create</button>
