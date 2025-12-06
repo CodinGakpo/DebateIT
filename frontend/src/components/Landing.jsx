@@ -1,5 +1,5 @@
 // src/components/Landing.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
 import Navbar from "./Navbar";
@@ -17,6 +17,22 @@ import {
 } from "lucide-react";
 
 export default function Landing() {
+    // Matchmaking state
+  const [matchStatus, setMatchStatus] = useState(""); // "", "searching", "waiting", "matched", "error", "cancelled"
+  const matchmakingSocketRef = useRef(null);
+
+  // Ensure socket is closed on unmount
+  useEffect(() => {
+    return () => {
+      if (matchmakingSocketRef.current) {
+        try {
+          matchmakingSocketRef.current.close();
+        } catch (e) {}
+        matchmakingSocketRef.current = null;
+      }
+    };
+  }, []);
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const navigate = useNavigate();
@@ -32,14 +48,106 @@ export default function Landing() {
     }
     callback();
   }
+  
+  function startMatchmaking() {
+    // If already searching, ignore
+    if (matchStatus === "searching" || matchStatus === "waiting") return;
 
-  // Stranger Danger → random room
+    // Cleanup any old socket
+    if (matchmakingSocketRef.current) {
+      try {
+        matchmakingSocketRef.current.close();
+      } catch (e) {}
+      matchmakingSocketRef.current = null;
+    }
+
+    setMatchStatus("searching");
+
+    const socket = new WebSocket("ws://localhost:8000/ws/matchmaking/");
+    matchmakingSocketRef.current = socket;
+
+    socket.onopen = () => {
+      try {
+        socket.send(JSON.stringify({ action: "find_match" }));
+        setMatchStatus("waiting");
+      } catch (err) {
+        console.error("Failed to send find_match:", err);
+        setMatchStatus("error");
+      }
+    };
+
+    socket.onmessage = (evt) => {
+      let data;
+      try {
+        data = JSON.parse(evt.data);
+      } catch (err) {
+        console.error("Invalid message from matchmaking socket:", evt.data);
+        return;
+      }
+
+      if (data.status === "waiting") {
+        setMatchStatus("waiting");
+        return;
+      }
+
+      if (data.status === "matched" && data.room_code) {
+        setMatchStatus("matched");
+        try {
+          socket.close();
+        } catch (e) {}
+        matchmakingSocketRef.current = null;
+
+        // Go to the debate room – Room.jsx already expects this param
+        navigate(`/room/${data.room_code}`);
+        return;
+      }
+
+      console.warn("Unexpected matchmaking payload:", data);
+    };
+
+    socket.onerror = (ev) => {
+      console.error("Matchmaking socket error:", ev);
+      setMatchStatus("error");
+      try {
+        socket.close();
+      } catch (e) {}
+      matchmakingSocketRef.current = null;
+    };
+
+    socket.onclose = () => {
+      // If closed while searching/waiting but not matched, mark cancelled
+      if (matchStatus !== "matched") {
+        if (matchStatus === "waiting" || matchStatus === "searching") {
+          setMatchStatus("cancelled");
+        }
+      }
+      matchmakingSocketRef.current = null;
+    };
+  }
+
+  function cancelMatchmaking() {
+    if (!matchmakingSocketRef.current) {
+      setMatchStatus("");
+      return;
+    }
+    try {
+      matchmakingSocketRef.current.close();
+    } catch (e) {
+      console.warn("Error closing matchmaking socket:", e);
+    }
+    matchmakingSocketRef.current = null;
+    setMatchStatus("cancelled");
+  }
+
+
+  // Stranger Danger → matchmaking to random opponent
   function handleStrangerDanger() {
     checkAuthAndNavigate(() => {
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      navigate(`/room/${code}`);
+      startMatchmaking();
     });
   }
+
+
 
   // Friendly Fire → create/join screen
   function handleFriendlyFire() {
@@ -138,14 +246,45 @@ export default function Landing() {
                     </span>
                   </div>
 
-                  <button
+                                    <button
                     type="button"
                     onClick={handleStrangerDanger}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-red-500/50 flex items-center justify-center gap-2"
+                    disabled={matchStatus === "searching" || matchStatus === "waiting"}
+                    className={`w-full font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 ${
+                      matchStatus === "searching" || matchStatus === "waiting"
+                        ? "bg-slate-600 cursor-not-allowed shadow-none"
+                        : "bg-red-500 hover:bg-red-600 text-white shadow-red-500/50"
+                    }`}
                   >
                     {!isAuthenticated && <Lock className="w-5 h-5" />}
-                    ENTER BATTLE
+                    {matchStatus === "searching" && "Connecting to arena..."}
+                    {matchStatus === "waiting" && "Finding you an opponent..."}
+                    {matchStatus === "" && "ENTER BATTLE"}
+                    {matchStatus === "error" && "Retry Matchmaking"}
+                    {matchStatus === "cancelled" && "ENTER BATTLE"}
                   </button>
+
+                  {/* Optional: small status + cancel control */}
+                  <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
+                    <span>
+                      {matchStatus === "" && "Click to match with a random debater"}
+                      {matchStatus === "searching" && "Connecting to matchmaking server..."}
+                      {matchStatus === "waiting" && "Searching for a worthy opponent..."}
+                      {matchStatus === "matched" && "Matched! Entering arena..."}
+                      {matchStatus === "cancelled" && "Search cancelled."}
+                      {matchStatus === "error" && "Matchmaking failed. Try again."}
+                    </span>
+                    {(matchStatus === "searching" || matchStatus === "waiting") && (
+                      <button
+                        type="button"
+                        onClick={cancelMatchmaking}
+                        className="ml-3 underline hover:text-red-300"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+
                 </div>
               </div>
 
