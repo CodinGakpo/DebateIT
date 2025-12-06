@@ -1,51 +1,223 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
+import random
+import string
+from urllib.parse import parse_qs
 
+
+# ---------------------------
+# ROOM CONSUMER
+# ---------------------------
+ROOM_PARTICIPANTS = {}
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_code = self.scope['url_route']['kwargs']['room_code']
         self.room_group_name = f"room_{self.room_code}"
 
-        await self.channel_layer.group_add(
-            self.room_group_name,
-            self.channel_name
-        )
+        # 🔹 Get email passed from frontend WebSocket query string
+        # ws://.../ws/room/ABC123/?email=someone@example.com
+        query_string = self.scope.get("query_string", b"").decode()
+        params = parse_qs(query_string)
+        email = params.get("email", ["Anonymous"])[0]
 
+        # Use email as backend identity (UI will show "You" for self)
+        self.user_name = email
+
+        # track participants for this room
+        room_participants = ROOM_PARTICIPANTS.setdefault(self.room_group_name, {})
+        num = len(room_participants)
+
+        # ✅ max 2 participants
+        if num >= 2:
+            await self.close(code=4001)
+            return
+
+        # ✅ assign role based on join order
+        if num == 0:
+            role = "Challenger"
+        else:
+            role = "Defender"
+
+        # stable id for this connection
+        self.user_id = self.channel_name
+
+        # 👇 IMPORTANT: use self.user_name here, NOT display_name
+        self.participant = {
+            "id": self.user_id,
+            "name": self.user_name,
+            "role": role,
+            "isActive": True,
+        }
+
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-    async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(
+        # send full room state to THIS client only
+        await self.send(json.dumps({
+            "type": "room_state",
+            "self": self.participant,
+            "participants": list(room_participants.values()),
+        }))
+
+        # add to room list
+        room_participants[self.user_id] = self.participant
+
+        # tell others that someone joined
+        await self.channel_layer.group_send(
             self.room_group_name,
-            self.channel_name
+            {
+                "type": "participant_joined",
+                "participant": self.participant,
+                "sender_channel": self.channel_name,
+            },
         )
+
+    async def participant_joined(self, event):
+        # ignore our own join event (we already know about ourselves)
+        if event.get("sender_channel") == self.channel_name:
+            return
+
+        await self.send(json.dumps({
+            "type": "participant_joined",
+            "participant": event["participant"],
+        }))
+
+    async def disconnect(self, close_code):
+        """
+        Called when the WebSocket closes.
+
+        NOTE: This can be called even if connect() bailed out early
+        (e.g. room full), so we must guard against missing attributes.
+        """
+        room_group = getattr(self, "room_group_name", None)
+        user_id = getattr(self, "user_id", None)
+        user_name = getattr(self, "user_name", None)
+
+        # If we never fully connected / never set these, nothing to clean up
+        if room_group is None or user_id is None:
+            return
+
+        # Remove from room participant list
+        room_participants = ROOM_PARTICIPANTS.get(room_group, {})
+        room_participants.pop(user_id, None)
+
+        if not room_participants and room_group in ROOM_PARTICIPANTS:
+            ROOM_PARTICIPANTS.pop(room_group, None)
+
+        # Notify others that participant left
+        await self.channel_layer.group_send(
+            room_group,
+            {
+                "type": "participant_left",
+                "user_id": user_id,
+                "user_name": user_name or "Anonymous",
+            },
+        )
+
+        # And leave the channel layer group
+        await self.channel_layer.group_discard(
+            room_group,
+            self.channel_name,
+        )
+
+
 
     async def receive(self, text_data):
         data = json.loads(text_data)
         message_type = data.get("type")
 
-        if message_type == "change_color":
+        if message_type == "chat_message":
+            # Broadcast chat message to room group
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    "type": "broadcast_color",
-                    "color": data["color"]
+                    'type': 'chat_message_handler',
+                    'message': data.get('message'),
+                    # ✅ always use backend name, ignore client "sender"
+                    'sender': self.user_name,
+                    'sender_id': self.user_id
+                }
+            )
+        
+        elif message_type == "toggle_audio":
+            # Broadcast audio toggle status
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'audio_status_handler',
+                    'muted': data.get('muted'),
+                    'user_id': self.user_id
+                }
+            )
+        
+        elif message_type == "speaking_status":
+            # Broadcast speaking status to others
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'speaking_status_handler',
+                    'isSpeaking': data.get('isSpeaking'),
+                    'user_id': self.user_id,
+                    'skip_sender': self.channel_name
                 }
             )
 
-    async def broadcast_color(self, event):
+    # Handler for participant_joined
+    async def participant_joined(self, event):
+        # Don't send to self
+        if event.get('skip_sender') == self.channel_name:
+            return
+            
         await self.send(text_data=json.dumps({
-            "type": "color_update",
-            "color": event["color"]
+            'type': 'participant_joined',
+            'participant': event['participant']
         }))
-# ---------------------------
-# NEW MATCHMAKING CONSUMER
-# ---------------------------
-import json
-from channels.generic.websocket import AsyncWebsocketConsumer
-import random, string
 
+    # Handler for participant_left
+    async def participant_left(self, event):
+        if event['user_id'] != self.user_id:
+            await self.send(text_data=json.dumps({
+                'type': 'participant_left',
+                'user_id': event['user_id'],
+                'user_name': event['user_name']
+            }))
+
+    # Handler for chat_message
+    async def chat_message_handler(self, event):
+        # Don't send own messages back
+        if event['sender_id'] != self.user_id:
+            await self.send(text_data=json.dumps({
+                'type': 'chat_message',
+                'message': event['message'],
+                'sender': event['sender']
+            }))
+
+    # Handler for audio_status
+    async def audio_status_handler(self, event):
+        if event['user_id'] != self.user_id:
+            await self.send(text_data=json.dumps({
+                'type': 'audio_status',
+                'muted': event['muted'],
+                'user_id': event['user_id']
+            }))
+
+    # Handler for speaking_status
+    async def speaking_status_handler(self, event):
+        # Don't send to self
+        if event.get('skip_sender') == self.channel_name:
+            return
+            
+        await self.send(text_data=json.dumps({
+            'type': 'speaking_status',
+            'isSpeaking': event['isSpeaking'],
+            'user_id': 'opponent'  # Always 'opponent' for the other person
+        }))
+
+
+# ---------------------------
+# MATCHMAKING CONSUMER
+# ---------------------------
 MATCH_QUEUE = []  # simple in-memory queue
-
 
 class MatchmakingConsumer(AsyncWebsocketConsumer):
     async def connect(self):
