@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useKindeAuth();   // <-- only addition
+  const [backendUser, setBackendUser] = useState(null);
 
   // Matchmaking state
-  const [status, setStatus] = useState(""); // "", "searching", "waiting", "matched", "error", "cancelled"
+  const [status, setStatus] = useState(""); 
   const socketRef = useRef(null);
 
-  // Ensure socket is closed on unmount
+  // cleanup websocket on unmount
   useEffect(() => {
     return () => {
       if (socketRef.current) {
@@ -19,10 +22,8 @@ export default function Dashboard() {
   }, []);
 
   const startPlay = () => {
-    // If already searching, ignore
     if (status === "searching" || status === "waiting") return;
 
-    // Cleanup any old socket
     if (socketRef.current) {
       try { socketRef.current.close(); } catch (e) {}
       socketRef.current = null;
@@ -34,10 +35,9 @@ export default function Dashboard() {
     socketRef.current = socket;
 
     socket.onopen = () => {
-      // send find_match request
       try {
         socket.send(JSON.stringify({ action: "find_match" }));
-        setStatus("waiting"); // now waiting for opponent
+        setStatus("waiting");
       } catch (err) {
         console.error("Failed to send find_match:", err);
         setStatus("error");
@@ -49,29 +49,20 @@ export default function Dashboard() {
       try {
         data = JSON.parse(evt.data);
       } catch (err) {
-        console.error("Invalid message from matchmaking socket:", evt.data);
+        console.error("Invalid matchmaking message:", evt.data);
         return;
       }
 
-      // Expecting: { status: "waiting" } or { status: "matched", room_code: "ABC123" }
       if (data.status === "waiting") {
         setStatus("waiting");
-        return;
-      }
-
-      if (data.status === "matched" && data.room_code) {
+      } else if (data.status === "matched" && data.room_code) {
         setStatus("matched");
-        // Close socket gracefully
         try { socket.close(); } catch (e) {}
         socketRef.current = null;
-
-        // Navigate to the room that your existing room logic uses
         navigate(`/room/${data.room_code}`);
-        return;
+      } else {
+        console.warn("Unexpected matchmaking payload:", data);
       }
-
-      // fallback: if some other structure comes
-      console.warn("Unexpected matchmaking payload:", data);
     };
 
     socket.onerror = (ev) => {
@@ -81,26 +72,17 @@ export default function Dashboard() {
       socketRef.current = null;
     };
 
-    socket.onclose = (ev) => {
-      // If closed while searching/waiting but not matched, mark cancelled (unless matched already handled)
-      if (status !== "matched") {
-        if (status === "waiting" || status === "searching") {
-          setStatus("cancelled");
-        }
+    socket.onclose = () => {
+      if (status !== "matched" && (status === "waiting" || status === "searching")) {
+        setStatus("cancelled");
       }
       socketRef.current = null;
     };
   };
 
   const cancelPlay = () => {
-    if (!socketRef.current) {
-      setStatus("");
-      return;
-    }
-    try {
-      socketRef.current.close();
-    } catch (e) {
-      console.warn("Error closing matchmaking socket:", e);
+    if (socketRef.current) {
+      try { socketRef.current.close(); } catch (e) {}
     }
     socketRef.current = null;
     setStatus("cancelled");
@@ -109,6 +91,13 @@ export default function Dashboard() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Dashboard</h1>
+
+      {/* ✅ Added: User Profile Section — SAFE & SMALL */}
+      <div style={{ marginBottom: 20, padding: 10, border: "1px solid #ccc" }}>
+        <h3>Your Profile</h3>
+        <p><strong>Email:</strong> {user?.email}</p>
+        <p><strong>User ID:</strong> {user?.id}</p>
+      </div>
 
       {/* --- Play / Matchmaking controls --- */}
       <div style={{ marginBottom: 12 }}>
@@ -139,11 +128,11 @@ export default function Dashboard() {
 
       <hr />
 
-      {/* --- Keep your create/join logic exactly as before --- */}
+      {/* Create/Join stays EXACTLY THE SAME */}
       <div style={{ marginTop: 12 }}>
-        <button onClick={() => navigate("/create-join")}>Create / Join Room</button>
-        {/* If you have separate create / join routes, they remain unchanged.
-            Replace the navigate targets above if your app uses different paths. */}
+        <button onClick={() => navigate("/create-join")}>
+          Create / Join Room
+        </button>
       </div>
     </div>
   );
