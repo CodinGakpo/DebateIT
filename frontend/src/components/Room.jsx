@@ -34,7 +34,7 @@ export default function Room() {
     {
       id: 1,
       sender: "System",
-      text: "Welcome to the debate arena!",
+      text: "Welcome to the DebateIt!",
       timestamp: new Date(),
       isSystem: true,
     },
