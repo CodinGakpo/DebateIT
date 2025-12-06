@@ -1,34 +1,44 @@
-// src/App.jsx
-import React from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { KindeProvider } from "@kinde-oss/kinde-auth-react";
+import Landing from './components/Landing';
+import CreateJoin from './components/CreateJoin';
+import Room from './components/Room';
+import ProtectedRoute from './components/ProtectedRoute';
 
-import ProtectedRoute from "./components/ProtectedRoute";
-import Landing from "./components/Landing";
-import Dashboard from "./components/Dashboard";
-import Room from "./components/Room";
-import CreateJoin from "./components/CreateJoin";
-
-export default function App() {
+function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Landing with navbar inside it */}
-        <Route path="/" element={<Landing />} />
-
-        {/* Public routes */}
-        <Route path="/room/:roomCode" element={<Room />} />
-        <Route path="/create-join" element={<CreateJoin />} />
-
-        {/* Protected dashboard */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </BrowserRouter>
+    <KindeProvider
+      clientId="your_kinde_client_id"
+      domain="https://your_domain.kinde.com"
+      redirectUri={window.location.origin}
+      logoutUri={window.location.origin}
+    >
+      <Router>
+        <Routes>
+          {/* Public route */}
+          <Route path="/" element={<Landing />} />
+          
+          {/* Protected routes - require authentication */}
+          <Route 
+            path="/create-join" 
+            element={
+              <ProtectedRoute>
+                <CreateJoin />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/room/:roomCode" 
+            element={
+              <ProtectedRoute>
+                <Room />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </Router>
+    </KindeProvider>
   );
 }
+
+export default App;

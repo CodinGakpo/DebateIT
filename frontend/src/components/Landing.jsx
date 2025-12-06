@@ -1,6 +1,7 @@
 // src/components/Landing.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
 import Navbar from "./Navbar";
 import {
   Skull,
@@ -11,23 +12,40 @@ import {
   Zap,
   Globe,
   Award,
+  Lock,
+  X
 } from "lucide-react";
 
 export default function Landing() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const navigate = useNavigate();
+  const { isAuthenticated, login } = useKindeAuth();
 
   const handleProfileToggle = () => setIsProfileOpen((prev) => !prev);
 
+  // Check authentication before allowing access
+  function checkAuthAndNavigate(callback) {
+    if (!isAuthenticated) {
+      setShowLoginModal(true);
+      return;
+    }
+    callback();
+  }
+
   // Stranger Danger → random room
   function handleStrangerDanger() {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    navigate(`/room/${code}`);
+    checkAuthAndNavigate(() => {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      navigate(`/room/${code}`);
+    });
   }
 
   // Friendly Fire → create/join screen
   function handleFriendlyFire() {
-    navigate("/create-join");
+    checkAuthAndNavigate(() => {
+      navigate("/create-join");
+    });
   }
 
   return (
@@ -37,6 +55,41 @@ export default function Landing() {
         onProfileToggle={handleProfileToggle}
         isProfileOpen={isProfileOpen}
       />
+
+      {/* Login Required Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+          <div className="relative max-w-md w-full">
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl blur-xl opacity-50"></div>
+            <div className="relative bg-slate-800 border-2 border-purple-500 rounded-2xl p-8">
+              <button
+                onClick={() => setShowLoginModal(false)}
+                className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="text-center mb-6">
+                <div className="bg-purple-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Lock className="w-8 h-8 text-purple-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">Login Required</h3>
+                <p className="text-gray-400">You need to be logged in to enter the battle arena</p>
+              </div>
+              
+              <button
+                onClick={() => {
+                  setShowLoginModal(false);
+                  login();
+                }}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-3 rounded-xl transition-colors"
+              >
+                Login to Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Page content */}
       <div
@@ -88,8 +141,9 @@ export default function Landing() {
                   <button
                     type="button"
                     onClick={handleStrangerDanger}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-red-500/50"
+                    className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-red-500/50 flex items-center justify-center gap-2"
                   >
+                    {!isAuthenticated && <Lock className="w-5 h-5" />}
                     ENTER BATTLE
                   </button>
                 </div>
@@ -129,8 +183,9 @@ export default function Landing() {
                   <button
                     type="button"
                     onClick={handleFriendlyFire}
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-blue-500/50"
+                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-blue-500/50 flex items-center justify-center gap-2"
                   >
+                    {!isAuthenticated && <Lock className="w-5 h-5" />}
                     ENTER BATTLE
                   </button>
                 </div>

@@ -14,6 +14,7 @@ import {
   Send,
   X
 } from "lucide-react";
+import useAudioDetection from "../hooks/useAudioDetection";
 
 export default function Room() {
   const { roomCode } = useParams();
@@ -27,6 +28,7 @@ export default function Room() {
   const [copied, setCopied] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
   const [message, setMessage] = useState("");
+  const [opponentSpeaking, setOpponentSpeaking] = useState(false);
   const [chatMessages, setChatMessages] = useState([
     { id: 1, sender: "System", text: "Welcome to the debate arena!", timestamp: new Date(), isSystem: true }
   ]);
@@ -34,18 +36,50 @@ export default function Room() {
     { id: 1, name: "You", role: "Challenger", isActive: true },
   ]);
 
+  // Use audio detection hook
+  const isSpeaking = useAudioDetection(isMuted, 30);
+
   useEffect(() => {
+    // For Kinde auth, you might want to pass the token in the WebSocket URL
+    // const { getToken } = useKindeAuth(); 
+    // const token = await getToken();
+    // socketRef.current = new WebSocket(`ws://localhost:8000/ws/room/${roomCode}/?token=${token}`);
+    
     socketRef.current = new WebSocket(`ws://localhost:8000/ws/room/${roomCode}/`);
+
+    socketRef.current.onopen = () => {
+      console.log('WebSocket connected to room:', roomCode);
+    };
+
+    socketRef.current.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
 
     socketRef.current.onmessage = (e) => {
       const data = JSON.parse(e.data);
+      console.log('Received message:', data);
       
       if (data.type === "participant_joined") {
-        setParticipants(prev => [...prev, data.participant]);
+        setParticipants(prev => {
+          // Avoid duplicates
+          if (prev.some(p => p.id === data.participant.id)) {
+            return prev;
+          }
+          return [...prev, data.participant];
+        });
         setChatMessages(prev => [...prev, {
           id: Date.now(),
           sender: "System",
           text: `${data.participant.name} has joined the debate`,
+          timestamp: new Date(),
+          isSystem: true
+        }]);
+      } else if (data.type === "participant_left") {
+        setParticipants(prev => prev.filter(p => p.id !== data.user_id));
+        setChatMessages(prev => [...prev, {
+          id: Date.now(),
+          sender: "System",
+          text: `${data.user_name} has left the debate`,
           timestamp: new Date(),
           isSystem: true
         }]);
@@ -57,15 +91,34 @@ export default function Room() {
           timestamp: new Date(),
           isSystem: false
         }]);
+      } else if (data.type === "speaking_status") {
+        // Update speaking status for participants
+        if (data.user_id === "opponent") {
+          setOpponentSpeaking(data.isSpeaking);
+        }
       }
     };
 
-    return () => socketRef.current.close();
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.close();
+      }
+    };
   }, [roomCode]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  // Send speaking status to server when it changes
+  useEffect(() => {
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: "speaking_status",
+        isSpeaking: isSpeaking
+      }));
+    }
+  }, [isSpeaking]);
 
   function toggleMute() {
     setIsMuted(!isMuted);
@@ -282,12 +335,18 @@ export default function Room() {
           {/* Participant Video Feeds */}
           {participants.map((participant, index) => (
             <div key={participant.id} className="relative group">
-              <div className={`absolute inset-0 rounded-2xl blur-xl opacity-50 ${
+              <div className={`absolute inset-0 rounded-2xl blur-xl transition-opacity duration-300 ${
+                index === 0 
+                  ? (isSpeaking ? 'opacity-100 animate-pulse' : 'opacity-50')
+                  : (opponentSpeaking ? 'opacity-100 animate-pulse' : 'opacity-50')
+              } ${
                 index === 0 ? 'bg-gradient-to-r from-red-500 to-rose-500' : 'bg-gradient-to-r from-blue-500 to-cyan-500'
               }`}></div>
               
-              <div className={`relative bg-slate-800/90 backdrop-blur-sm rounded-2xl border-2 overflow-hidden ${
-                index === 0 ? 'border-red-500' : 'border-blue-500'
+              <div className={`relative bg-slate-800/90 backdrop-blur-sm rounded-2xl border-2 overflow-hidden transition-all duration-300 ${
+                index === 0 
+                  ? (isSpeaking ? 'border-red-400 shadow-lg shadow-red-500/50' : 'border-red-500')
+                  : (opponentSpeaking ? 'border-blue-400 shadow-lg shadow-blue-500/50' : 'border-blue-500')
               }`} style={{ aspectRatio: '16/9' }}>
                 {/* Video Placeholder */}
                 <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
