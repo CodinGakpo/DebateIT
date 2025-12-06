@@ -6,6 +6,16 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useKindeAuth();   // <-- only addition
   const [backendUser, setBackendUser] = useState(null);
+//DEBUG TOKEN
+  const { getToken } = useKindeAuth();
+
+useEffect(() => {
+  async function showToken() {
+    const token = await getToken();
+    console.log("TOKEN FOR INSOMNIA:", token);
+  }
+  showToken();
+}, []);
 
   // Matchmaking state
   const [status, setStatus] = useState(""); 
