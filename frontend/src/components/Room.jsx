@@ -616,18 +616,17 @@ export default function Room() {
             const iconBg = isChallenger
               ? "bg-gradient-to-br from-red-500 to-rose-500"
               : "bg-gradient-to-br from-blue-500 to-cyan-500";
-      
-  // Who is speaking on this card?
-  const isCardSpeaking = isSelf ? isSpeaking : isOpponentSpeaking;
 
-  // Violent glow using only Tailwind utilities (no external CSS)
-  const speakingClass = isCardSpeaking
-    ? isChallenger
-      ? "ring-4 ring-red-400 shadow-[0_0_40px_rgba(248,113,113,0.9)] scale-[1.02]"
-      : "ring-4 ring-blue-400 shadow-[0_0_40px_rgba(59,130,246,0.9)] scale-[1.02]"
-    : "";
-    const isCardMuted = isSelf ? isMuted : isOpponentMuted;
+            // Who is speaking on this card?
+            const isCardSpeaking = isSelf ? isSpeaking : isOpponentSpeaking;
 
+            // Violent glow using only Tailwind utilities (no external CSS)
+            const speakingClass = isCardSpeaking
+              ? isChallenger
+                ? "ring-4 ring-red-400 shadow-[0_0_40px_rgba(248,113,113,0.9)] scale-[1.02]"
+                : "ring-4 ring-blue-400 shadow-[0_0_40px_rgba(59,130,246,0.9)] scale-[1.02]"
+              : "";
+            const isCardMuted = isSelf ? isMuted : isOpponentMuted;
 
             return (
               <div
@@ -635,11 +634,9 @@ export default function Room() {
                 className="relative group rounded-3xl bg-slate-900/80 border border-slate-700/80 overflow-hidden shadow-2xl shadow-black/60"
               >
                 <div
-  className={`relative overflow-hidden rounded-3xl border-2 ${borderColor} shadow-lg ${glowColor} ${speakingClass} transition-all duration-150`}
-  style={{ aspectRatio: "16/9" }}
->
-
-
+                  className={`relative overflow-hidden rounded-3xl border-2 ${borderColor} shadow-lg ${glowColor} ${speakingClass} transition-all duration-150`}
+                  style={{ aspectRatio: "16/9" }}
+                >
                   {/* Video Placeholder */}
                   <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
                     <div
@@ -669,11 +666,10 @@ export default function Room() {
                         </span>
                       </div>
                       {isCardMuted && (
-  <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
-    <MicOff className="w-4 h-4 text-red-400" />
-  </div>
-)}
-
+                        <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
+                          <MicOff className="w-4 h-4 text-red-400" />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -701,86 +697,93 @@ export default function Room() {
         </div>
 
         {/* One-minute speech capture */}
-       
-<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-5">
-  {/* One-minute speech */}
-  <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-lg shadow-black/40">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-white font-bold text-base">One-Minute Speech</h3>
-      <button
-        onClick={isRecording ? stopOneMinuteRecording : startOneMinuteRecording}
-        className={`px-4 py-2 rounded-lg text-white font-semibold text-sm transition-all ${
-          isRecording
-            ? "bg-red-500 hover:bg-red-600"
-            : "bg-blue-600 hover:bg-blue-700"
-        }`}
-      >
-        {isRecording ? "Stop" : "Start"}
-      </button>
-    </div>
 
-    {recordError && (
-      <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
-        {recordError}
-      </div>
-    )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-5">
+          {/* One-minute speech */}
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-lg shadow-black/40">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold text-base">
+                One-Minute Speech
+              </h3>
+              <button
+                onClick={
+                  isRecording ? stopOneMinuteRecording : startOneMinuteRecording
+                }
+                className={`px-4 py-2 rounded-lg text-white font-semibold text-sm transition-all ${
+                  isRecording
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {isRecording ? "Stop" : "Start"}
+              </button>
+            </div>
 
-    <div className="bg-slate-900/70 border border-slate-700/80 rounded-xl p-4 min-h-[140px]">
-      {oneMinuteTranscript ? (
-        <p className="text-white text-sm leading-relaxed">
-          {oneMinuteTranscript}
-        </p>
-      ) : (
-        <p className="text-sm text-gray-300">
-          Press Start, speak for up to one minute, then stop to see the
-          transcript.
-        </p>
-      )}
-    </div>
-  </div>
+            {recordError && (
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
+                {recordError}
+              </div>
+            )}
 
-  {/* Live transcription */}
-  <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-lg shadow-black/40">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="text-white font-bold text-base">Live Transcription</h3>
-      <button
-        onClick={isListening ? stopLiveTranscription : startLiveTranscription}
-        className={`px-4 py-2 rounded-lg text-white font-semibold text-sm transition-all ${
-          isListening
-            ? "bg-red-500 hover:bg-red-600"
-            : "bg-green-600 hover:bg-green-700"
-        }`}
-      >
-        {isListening ? "Stop" : "Start"}
-      </button>
-    </div>
-
-    {liveError && (
-      <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
-        {liveError}
-      </div>
-    )}
-
-    <div className="bg-slate-900/70 border border-slate-700/80 rounded-xl p-4 min-h-[140px] space-y-2 max-h-64 overflow-y-auto">
-      {Object.keys(liveTranscripts).length === 0 ? (
-        <p className="text-sm text-gray-300">
-          Start to stream your speech; transcripts will appear here and broadcast
-          to the room.
-        </p>
-      ) : (
-        Object.entries(liveTranscripts).map(([from, text]) => (
-          <div key={from} className="text-sm">
-            <span className="font-semibold text-indigo-300 mr-2">
-              {from === currentEmailRef.current ? "You" : from}:
-            </span>
-            <span className="text-white">{text}</span>
+            <div className="bg-slate-900/70 border border-slate-700/80 rounded-xl p-4 min-h-[140px]">
+              {oneMinuteTranscript ? (
+                <p className="text-white text-sm leading-relaxed">
+                  {oneMinuteTranscript}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-300">
+                  Press Start, speak for up to one minute, then stop to see the
+                  transcript.
+                </p>
+              )}
+            </div>
           </div>
-        ))
-      )}
-    </div>
-  </div>
-</div>
 
+          {/* Live transcription */}
+          <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 shadow-lg shadow-black/40">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold text-base">
+                Live Transcription
+              </h3>
+              <button
+                onClick={
+                  isListening ? stopLiveTranscription : startLiveTranscription
+                }
+                className={`px-4 py-2 rounded-lg text-white font-semibold text-sm transition-all ${
+                  isListening
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-green-600 hover:bg-green-700"
+                }`}
+              >
+                {isListening ? "Stop" : "Start"}
+              </button>
+            </div>
+
+            {liveError && (
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
+                {liveError}
+              </div>
+            )}
+
+            <div className="bg-slate-900/70 border border-slate-700/80 rounded-xl p-4 min-h-[140px] space-y-2 max-h-64 overflow-y-auto">
+              {Object.keys(liveTranscripts).length === 0 ? (
+                <p className="text-sm text-gray-300">
+                  Start to stream your speech; transcripts will appear here and
+                  broadcast to the room.
+                </p>
+              ) : (
+                Object.entries(liveTranscripts).map(([from, text]) => (
+                  <div key={from} className="text-sm">
+                    <span className="font-semibold text-indigo-300 mr-2">
+                      {from === currentEmailRef.current ? "You" : from}:
+                    </span>
+                    <span className="text-white">{text}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Control Bar */}
