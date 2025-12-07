@@ -28,6 +28,8 @@ export default function Room() {
   const messageInputRef = useRef(null);
   const liveRecognizerRef = useRef(null);
   const currentEmailRef = useRef("You");
+  const interimTranscriptRef = useRef(""); // Track interim text separately
+  const finalTranscriptRef = useRef(""); // Track finalized text
 
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
   const WS_BASE = import.meta.env.VITE_WS_BASE || "ws://localhost:8000";
@@ -122,7 +124,7 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
         ...prev,
         {
           id: Date.now(),
-          sender: data.sender, // opponent’s email
+          sender: data.sender,
           text: data.message,
           timestamp: new Date(),
           isSystem: false,
@@ -220,7 +222,6 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
         JSON.stringify({
           type: "chat_message",
           message: message,
-          // sender: "You"
         })
       );
 
@@ -309,32 +310,55 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
     recognizer.interimResults = true;
     recognizer.lang = "en-US";
 
+    // Reset transcript refs when starting
+    interimTranscriptRef.current = "";
+    finalTranscriptRef.current = "";
+
     recognizer.onresult = (event) => {
-      const res = event.results[event.results.length - 1];
-      const text = (res[0]?.transcript || "").trim();
-      if (!text) return;
+      let interimText = "";
+      let finalText = "";
+
+      // Process all results from this event
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        
+        if (event.results[i].isFinal) {
+          finalText += transcript + " ";
+        } else {
+          interimText += transcript;
+        }
+      }
 
       const selfLabel = currentEmailRef.current || "You";
-      setLiveTranscripts((prev) => {
-        const existing = prev[selfLabel] || "";
-        const updated = existing ? `${existing} ${text}` : text;
-        return { ...prev, [selfLabel]: updated };
-      });
 
-      if (res.isFinal) {
+      // Update final transcript if we got final results
+      if (finalText.trim()) {
+        finalTranscriptRef.current += finalText;
+        
+        // Send final text to server
         socketRef.current?.send(
           JSON.stringify({
             type: "speech_transcript",
-            transcript: text,
+            transcript: finalText.trim(),
           })
         );
       }
+
+      // Combine final + interim for display (interim is temporary)
+      const displayText = (finalTranscriptRef.current + interimText).trim();
+
+      // Update state with combined text
+      setLiveTranscripts((prev) => ({
+        ...prev,
+        [selfLabel]: displayText,
+      }));
     };
 
     recognizer.onerror = (e) => {
       setLiveError(e.error || "Live transcription error");
       setIsListening(false);
     };
+    
     recognizer.onend = () => {
       // Auto-restart if user didn't explicitly stop
       if (isListening) {
@@ -364,10 +388,12 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
       } catch (e) {}
     }
     setIsListening(false);
-    // Persist the latest text for "You"
+    
+    // Persist the final transcript
     const selfLabel = currentEmailRef.current || "You";
-    const text = liveTranscripts[selfLabel];
-    if (text && text.trim()) {
+    const text = finalTranscriptRef.current.trim();
+    
+    if (text) {
       fetch(`${API_BASE}/transcribe_text/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -380,6 +406,10 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
         // ignore errors here to not disrupt UI
       });
     }
+
+    // Reset refs
+    interimTranscriptRef.current = "";
+    finalTranscriptRef.current = "";
   }
 
   useEffect(() => {
@@ -752,61 +782,57 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
               isMuted
                 ? "bg-red-500 hover:bg-red-600 text-white"
                 : "bg-slate-700 hover:bg-slate-600 text-white"
-            } shadow-lg`}
-            title={isMuted ? "Unmute" : "Mute"}
-          >
-            {isMuted ? (
-              <MicOff className="w-6 h-6" />
-            ) : (
-              <Mic className="w-6 h-6" />
-            )}
-          </button>
+            } shadow-lg`}>
+  {isMuted ? (
+    <MicOff className="w-6 h-6" />
+  ) : (
+    <Mic className="w-6 h-6" />
+  )}
+</button>
 
-          {/* Settings Button */}
-          <button
-            className="p-4 rounded-full bg-slate-700 hover:bg-slate-600 text-white transition-all shadow-lg"
-            title="Settings"
-          >
-            <Settings className="w-6 h-6" />
-          </button>
+{/* Settings Button */}
+<button
+  className="p-4 rounded-full bg-slate-700 hover:bg-slate-600 text-white transition-all shadow-lg"
+  title="Settings"
+>
+  <Settings className="w-6 h-6" />
+</button>
 
-          {/* Chat Toggle Button */}
-          <button
-            onClick={() => setShowChat(!showChat)}
-            className={`p-4 rounded-full transition-all shadow-lg ${
-              showChat
-                ? "bg-purple-500 hover:bg-purple-600 text-white"
-                : "bg-slate-700 hover:bg-slate-600 text-white"
-            }`}
-            title="Toggle chat"
-          >
-            <MessageSquare className="w-6 h-6" />
-          </button>
+{/* Chat Toggle Button */}
+<button
+  onClick={() => setShowChat(!showChat)}
+  className={`p-4 rounded-full transition-all shadow-lg ${
+    showChat
+      ? "bg-purple-500 hover:bg-purple-600 text-white"
+      : "bg-slate-700 hover:bg-slate-600 text-white"
+  }`}
+  title="Toggle chat"
+>
+  <MessageSquare className="w-6 h-6" />
+</button>
 
-          {/* Leave Button */}
-          <button
-            onClick={handleLeaveRoom}
-            className="p-4 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all shadow-lg ml-4"
-            title="Leave room"
-          >
-            <PhoneOff className="w-6 h-6" />
-          </button>
-        </div>
+{/* Leave Button */}
+<button
+  onClick={handleLeaveRoom}
+  className="p-4 rounded-full bg-red-500 hover:bg-red-600 text-white transition-all shadow-lg ml-4"
+  title="Leave room"
+>
+  <PhoneOff className="w-6 h-6" />
+</button>
+</div>
 
-        {/* Control Labels */}
-        <div className="max-w-4xl mx-auto flex items-center justify-center gap-4 mt-3">
-          <span className="text-xs text-gray-400 w-14 text-center">
-            {isMuted ? "Unmute" : "Mute"}
-          </span>
-          <span className="text-xs text-gray-400 w-14 text-center">
-            Settings
-          </span>
-          <span className="text-xs text-gray-400 w-14 text-center">Chat</span>
-          <span className="text-xs text-gray-400 w-14 text-center ml-4">
-            Leave
-          </span>
-        </div>
-      </div>
-    </div>
-  );
+{/* Control Labels */}
+<div className="max-w-4xl mx-auto flex items-center justify-center gap-4 mt-3">
+  <span className="text-xs text-gray-400 w-14 text-center">
+    {isMuted ? "Unmute" : "Mute"}
+  </span>
+  <span className="text-xs text-gray-400 w-14 text-center">Settings</span>
+  <span className="text-xs text-gray-400 w-14 text-center">Chat</span>
+  <span className="text-xs text-gray-400 w-14 text-center ml-4">
+    Leave
+  </span>
+</div>
+</div>
+</div>
+);
 }
