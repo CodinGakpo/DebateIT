@@ -13,10 +13,10 @@ staticfiles/
 *.log
 
 # Django migrations (optional to ignore)
-# */migrations/
-# except __init__.py:
-# */migrations/*.py
-# !*/migrations/__init__.py
+*/migrations/
+except __init__.py:
+*/migrations/*.py
+!*/migrations/__init__.py
 
 # ---- Node / Vite / React ----
 frontend/node_modules/
