@@ -57,12 +57,44 @@ WSGI_APPLICATION = "debate_hub.wsgi.application"
 ASGI_APPLICATION = "debate_hub.asgi.application"
 
 # Database
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     }
+# }
+
+# settings.py (add near top with other imports)
+import os
+from urllib.parse import urlparse
+
+NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL")
+
+if NEON_DATABASE_URL:
+    # Parse the URL and set Django DATABASES for Neon
+    url = urlparse(NEON_DATABASE_URL)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": url.path[1:],  # strip leading '/'
+            "USER": url.username,
+            "PASSWORD": url.password,
+            "HOST": url.hostname,
+            "PORT": url.port or "",
+            # Require SSL for Neon
+            "OPTIONS": {"sslmode": "require"},
+        }
     }
-}
+else:
+    # fallback to local sqlite for development (unchanged)
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
 
 # REST framework defaults
 REST_FRAMEWORK = {

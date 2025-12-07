@@ -304,7 +304,13 @@ class AssemblyTranscribeView(APIView):
             )
 
         text_out = transcript.text or ""
-        store_transcript(text_out, speaker=request.data.get("speaker"), room_code=request.data.get("room_code"))
+        store_transcript(
+        room_code=request.data.get("room_code"),
+        speaker=request.data.get("speaker"),
+        content=text_out,
+        source=1  # ONE-MINUTE SPEECH
+    )
+
 
         return Response({"transcript": text_out})
 
@@ -323,7 +329,12 @@ class TextTranscriptView(APIView):
         if not text:
             return Response({"error": "text is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        store_transcript(text, speaker=speaker, room_code=room_code)
+        store_transcript(
+            room_code=room_code,
+            speaker=speaker,
+            content=text
+        )
+
         return Response({"stored": True})
 
 

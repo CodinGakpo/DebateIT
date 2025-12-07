@@ -5,6 +5,12 @@ import string
 from urllib.parse import parse_qs
 from channels.db import database_sync_to_async
 from .models import DebateRoom
+from .neon_store import (
+    async_store_transcript,
+    async_store_debate_turn,
+    async_store_room_event,
+    async_store_audio_event,
+)
 
 # ---------------------------
 # ROOM CONSUMER
@@ -13,6 +19,24 @@ ROOM_PARTICIPANTS = {}  # { "room_<code>": { channel_name: participant_dict, ...
 
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+                # --- Prevent duplicate connections for the same user/email in one room ---
+        # If an existing channel is present for this same user, tell it to close
+        # and remove it from the in-memory participant map. This ensures one
+        # active socket / participant per browser/user (prevents duplicate echoes).
+        existing_channels = [
+            uid for uid, p in list(room_participants.items())
+            if p.get("name") == self.user_name and uid != self.user_id
+        ]
+        for old_uid in existing_channels:
+            try:
+                # ask the old consumer instance to close itself
+                await self.channel_layer.send(old_uid, {"type": "force_disconnect"})
+            except Exception:
+                # best-effort; ignore errors
+                pass
+            # remove stale record immediately from in-memory map
+            room_participants.pop(old_uid, None)
+
         self.room_code = self.scope['url_route']['kwargs']['room_code']
         self.room_group_name = f"room_{self.room_code}"
 
@@ -56,6 +80,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
         room_participants[self.user_id] = self.participant
 
         # 6) NOW it is safe to accept websocket
+        await async_store_room_event(self.room_code, self.user_name, "join")
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
@@ -75,6 +100,16 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 "sender_channel": self.channel_name
             }
         )
+    async def forward_transcript(self, event):
+         # Ignore if message came from self
+        if event["sender_channel"] == self.channel_name:
+            return
+
+        await self.send(text_data=json.dumps({
+            "type": "speech_transcript",
+            "sender": event["sender"],
+            "transcript": event["transcript"],
+        }))
 
     async def disconnect(self, close_code):
         """
@@ -103,7 +138,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
         # If room empty, remove the room key entirely
         if not room_participants and room_group in ROOM_PARTICIPANTS:
             ROOM_PARTICIPANTS.pop(room_group, None)
-
+        await async_store_room_event(self.room_code, self.user_name, "leave")
         # Notify others that participant left
         await self.channel_layer.group_send(
             room_group,
@@ -147,6 +182,8 @@ class RoomConsumer(AsyncWebsocketConsumer):
                     'user_id': self.user_id
                 }
             )
+            muted = data.get("muted")
+            await async_store_audio_event(self.room_code, self.user_name, {"muted": muted})
 
         elif message_type == "speaking_status":
             # Broadcast speaking status to others
@@ -159,6 +196,32 @@ class RoomConsumer(AsyncWebsocketConsumer):
                     'skip_sender': self.channel_name
                 }
             )
+            isSpeaking = data.get("isSpeaking")
+            await async_store_audio_event(self.room_code, self.user_name, {"isSpeaking": isSpeaking})
+        elif message_type == "speech_transcript":
+            transcript = data.get("transcript")
+            # transcript = data.get("transcript", "").strip()
+            if transcript:
+                # Broadcast ONLY to others — not to self
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        "type": "forward_transcript",
+                        "sender_channel": self.channel_name,
+                        "sender": self.user_name,
+                        "transcript": transcript,
+                    }
+                )
+
+
+        async def force_disconnect(self, event):
+            """
+            Handler to force-close a particular connection.
+            The event will be sent to a channel_name to tell that consumer
+            to close itself (useful for replacing duplicate connections).
+            """
+            # Close this connection (this triggers disconnect())
+            await self.close()
 
     # Handler for participant_joined
     async def participant_joined(self, event):
@@ -233,6 +296,7 @@ class MatchmakingConsumer(AsyncWebsocketConsumer):
 
         if data.get("action") == "find_match":
             await self.handle_matchmaking()
+        
 
     async def handle_matchmaking(self):
         # No one waiting → add player to queue
