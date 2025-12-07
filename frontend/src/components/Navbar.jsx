@@ -85,23 +85,13 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                   </div>
                   <button
                     onClick={onProfileToggle}
-                    className={`p-2 rounded-lg transition-all ${
+                    className={`p-2 rounded-full h-10 w-10 flex justify-center border-2 border-white transition-all cursor-pointer ${
                       isProfileOpen
                         ? "bg-purple-600 text-white"
                         : "bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white"
                     }`}
                   >
                     <User className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem("debateitUserEmail");
-                      logout();
-                    }}
-                    className="hidden md:block p-2 text-gray-400 hover:text-red-400 transition-colors"
-                    title="Logout"
-                  >
-                    <LogOut className="w-5 h-5" />
                   </button>
                 </>
               ) : (
@@ -179,7 +169,7 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
             isProfileOpen ? "translate-x-0" : "translate-x-full"
           } w-full md:w-96`}
         >
-          <div className="p-6">
+          <div className="p-6 flex flex-col h-full overflow-y-auto">
             {/* Profile Header */}
             <div className="text-center mb-8">
               <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full mx-auto mb-4 flex items-center justify-center">
@@ -274,6 +264,17 @@ export default function Navbar({ onProfileToggle, isProfileOpen }) {
                 </div>
               </div>
             </div>
+
+            <button
+              onClick={() => {
+                localStorage.removeItem("debateitUserEmail");
+                logout();
+              }}
+              className="mt-auto w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-800 hover:bg-red-600/90 text-red-400 hover:text-white border border-red-500/40 text-sm font-medium transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
           </div>
         </div>
       )}

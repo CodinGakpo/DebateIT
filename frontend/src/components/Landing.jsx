@@ -13,11 +13,11 @@ import {
   Globe,
   Award,
   Lock,
-  X
+  X,
 } from "lucide-react";
 
 export default function Landing() {
-    // Matchmaking state
+  // Matchmaking state
   const [matchStatus, setMatchStatus] = useState(""); // "", "searching", "waiting", "matched", "error", "cancelled"
   const matchmakingSocketRef = useRef(null);
 
@@ -48,7 +48,7 @@ export default function Landing() {
     }
     callback();
   }
-  
+
   function startMatchmaking() {
     // If already searching, ignore
     if (matchStatus === "searching" || matchStatus === "waiting") return;
@@ -139,15 +139,12 @@ export default function Landing() {
     setMatchStatus("cancelled");
   }
 
-
   // Stranger Danger → matchmaking to random opponent
   function handleStrangerDanger() {
     checkAuthAndNavigate(() => {
       startMatchmaking();
     });
   }
-
-
 
   // Friendly Fire → create/join screen
   function handleFriendlyFire() {
@@ -176,15 +173,19 @@ export default function Landing() {
               >
                 <X className="w-5 h-5" />
               </button>
-              
+
               <div className="text-center mb-6">
                 <div className="bg-purple-500/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Lock className="w-8 h-8 text-purple-400" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Login Required</h3>
-                <p className="text-gray-400">You need to be logged in to enter the battle arena</p>
+                <h3 className="text-2xl font-bold text-white mb-2">
+                  Login Required
+                </h3>
+                <p className="text-gray-400">
+                  You need to be logged in to enter the battle arena
+                </p>
               </div>
-              
+
               <button
                 onClick={() => {
                   setShowLoginModal(false);
@@ -209,48 +210,53 @@ export default function Landing() {
           <div className="max-w-6xl mx-auto">
             {/* Arena Modes */}
             <div
-              className={`grid gap-6 mb-20 transition-all duration-300 ${
+              className={`grid gap-6 mb-20 transition-all duration-300 items-stretch ${
                 isProfileOpen
                   ? "md:grid-cols-1 lg:grid-cols-2"
                   : "md:grid-cols-2"
               }`}
             >
               {/* Stranger Danger */}
-              <div className="relative group">
+              {/* Stranger Danger */}
+              <div className="relative group h-full">
                 <div className="absolute inset-0 bg-gradient-to-r from-red-500 to-rose-500 rounded-2xl blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
-                <div className="relative bg-slate-800/90 backdrop-blur-sm border-2 border-red-500 rounded-2xl p-8 hover:border-red-400 transition-all">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="bg-red-500 p-3 rounded-xl">
-                      <Skull className="w-8 h-8 text-white" />
+                <div className="relative bg-slate-800/90 backdrop-blur-sm border-2 border-red-500 rounded-2xl p-8 hover:border-red-400 transition-all flex flex-col h-full">
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="bg-red-500 p-3 rounded-xl">
+                        <Skull className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="bg-red-500/20 text-red-400 text-xs font-bold px-3 py-1 rounded-full border border-red-500/50">
+                        ARENA MODE
+                      </span>
                     </div>
-                    <span className="bg-red-500/20 text-red-400 text-xs font-bold px-3 py-1 rounded-full border border-red-500/50">
-                      ARENA MODE
-                    </span>
+
+                    <h2 className="text-3xl font-bold text-white mb-2">
+                      Stranger Danger
+                    </h2>
+                    <p className="text-gray-400 mb-6">
+                      Battle wits with random opponents worldwide
+                    </p>
+
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      <span className="bg-slate-700/50 text-red-400 text-sm px-3 py-1 rounded-lg border border-red-500/30 flex items-center gap-2">
+                        <Swords className="w-3 h-3" />
+                        Combat Ready
+                      </span>
+                      <span className="bg-slate-700/50 text-yellow-400 text-sm px-3 py-1 rounded-lg border border-yellow-500/30 flex items-center gap-2">
+                        <Trophy className="w-3 h-3" />
+                        Ranked
+                      </span>
+                    </div>
                   </div>
 
-                  <h2 className="text-3xl font-bold text-white mb-2">
-                    Stranger Danger
-                  </h2>
-                  <p className="text-gray-400 mb-6">
-                    Battle wits with random opponents worldwide
-                  </p>
-
-                  <div className="flex flex-wrap gap-2 mb-6">
-                    <span className="bg-slate-700/50 text-red-400 text-sm px-3 py-1 rounded-lg border border-red-500/30 flex items-center gap-2">
-                      <Swords className="w-3 h-3" />
-                      Combat Ready
-                    </span>
-                    <span className="bg-slate-700/50 text-yellow-400 text-sm px-3 py-1 rounded-lg border border-yellow-500/30 flex items-center gap-2">
-                      <Trophy className="w-3 h-3" />
-                      Ranked
-                    </span>
-                  </div>
-
-                                    <button
+                  <button
                     type="button"
                     onClick={handleStrangerDanger}
-                    disabled={matchStatus === "searching" || matchStatus === "waiting"}
-                    className={`w-full font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 ${
+                    disabled={
+                      matchStatus === "searching" || matchStatus === "waiting"
+                    }
+                    className={`w-full font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
                       matchStatus === "searching" || matchStatus === "waiting"
                         ? "bg-slate-600 cursor-not-allowed shadow-none"
                         : "bg-red-500 hover:bg-red-600 text-white shadow-red-500/50"
@@ -267,14 +273,20 @@ export default function Landing() {
                   {/* Optional: small status + cancel control */}
                   <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
                     <span>
-                      {matchStatus === "" && "Click to match with a random debater"}
-                      {matchStatus === "searching" && "Connecting to matchmaking server..."}
-                      {matchStatus === "waiting" && "Searching for a worthy opponent..."}
-                      {matchStatus === "matched" && "Matched! Entering arena..."}
+                      {matchStatus === "" &&
+                        "Click to match with a random debater"}
+                      {matchStatus === "searching" &&
+                        "Connecting to matchmaking server..."}
+                      {matchStatus === "waiting" &&
+                        "Searching for a worthy opponent..."}
+                      {matchStatus === "matched" &&
+                        "Matched! Entering arena..."}
                       {matchStatus === "cancelled" && "Search cancelled."}
-                      {matchStatus === "error" && "Matchmaking failed. Try again."}
+                      {matchStatus === "error" &&
+                        "Matchmaking failed. Try again."}
                     </span>
-                    {(matchStatus === "searching" || matchStatus === "waiting") && (
+                    {(matchStatus === "searching" ||
+                      matchStatus === "waiting") && (
                       <button
                         type="button"
                         onClick={cancelMatchmaking}
@@ -284,49 +296,54 @@ export default function Landing() {
                       </button>
                     )}
                   </div>
-
                 </div>
               </div>
 
               {/* Friendly Fire */}
-              <div className="relative group">
+              {/* Friendly Fire */}
+              <div className="relative group h-full">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-2xl blur-xl opacity-50 group-hover:opacity-75 transition-opacity"></div>
-                <div className="relative bg-slate-800/90 backdrop-blur-sm border-2 border-blue-500 rounded-2xl p-8 hover:border-blue-400 transition-all">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="bg-blue-500 p-3 rounded-xl">
-                      <Swords className="w-8 h-8 text-white" />
+                <div className="relative bg-slate-800/90 backdrop-blur-sm border-2 border-blue-500 rounded-2xl p-8 hover:border-blue-400 transition-all flex flex-col h-full">
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="bg-blue-500 p-3 rounded-xl">
+                        <Swords className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="bg-blue-500/20 text-blue-400 text-xs font-bold px-3 py-1 rounded-full border border-blue-500/50">
+                        ARENA MODE
+                      </span>
                     </div>
-                    <span className="bg-blue-500/20 text-blue-400 text-xs font-bold px-3 py-1 rounded-full border border-blue-500/50">
-                      ARENA MODE
-                    </span>
-                  </div>
 
-                  <h2 className="text-3xl font-bold text-white mb-2">
-                    Friendly Fire
-                  </h2>
-                  <p className="text-gray-400 mb-6">
-                    Challenge your friends to epic debates
-                  </p>
+                    <h2 className="text-3xl font-bold text-white mb-2">
+                      Friendly Fire
+                    </h2>
+                    <p className="text-gray-400 mb-6">
+                      Challenge your friends to epic debates
+                    </p>
 
-                  <div className="flex flex-wrap gap-2 mb-6">
-                    <span className="bg-slate-700/50 text-blue-400 text-sm px-3 py-1 rounded-lg border border-blue-500/30 flex items-center gap-2">
-                      <Swords className="w-3 h-3" />
-                      Combat Ready
-                    </span>
-                    <span className="bg-slate-700/50 text-yellow-400 text-sm px-3 py-1 rounded-lg border border-yellow-500/30 flex items-center gap-2">
-                      <Trophy className="w-3 h-3" />
-                      Ranked
-                    </span>
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      <span className="bg-slate-700/50 text-blue-400 text-sm px-3 py-1 rounded-lg border border-blue-500/30 flex items-center gap-2">
+                        <Swords className="w-3 h-3" />
+                        Combat Ready
+                      </span>
+                      <span className="bg-slate-700/50 text-yellow-400 text-sm px-3 py-1 rounded-lg border border-yellow-500/30 flex items-center gap-2">
+                        <Trophy className="w-3 h-3" />
+                        Ranked
+                      </span>
+                    </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleFriendlyFire}
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-blue-500/50 flex items-center justify-center gap-2"
+                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-blue-500/50 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {!isAuthenticated && <Lock className="w-5 h-5" />}
                     ENTER BATTLE
                   </button>
+                  <p className="mt-3 text-xs text-gray-400">
+                    Battle 1v1 with a friend using a private code
+                  </p>
                 </div>
               </div>
             </div>
