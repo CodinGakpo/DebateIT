@@ -250,7 +250,7 @@ export default function Landing() {
                     type="button"
                     onClick={handleStrangerDanger}
                     disabled={matchStatus === "searching" || matchStatus === "waiting"}
-                    className={`w-full font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 ${
+                    className={`w-full font-bold py-4 rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
                       matchStatus === "searching" || matchStatus === "waiting"
                         ? "bg-slate-600 cursor-not-allowed shadow-none"
                         : "bg-red-500 hover:bg-red-600 text-white shadow-red-500/50"
@@ -322,7 +322,7 @@ export default function Landing() {
                   <button
                     type="button"
                     onClick={handleFriendlyFire}
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-blue-500/50 flex items-center justify-center gap-2"
+                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-blue-500/50 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {!isAuthenticated && <Lock className="w-5 h-5" />}
                     ENTER BATTLE

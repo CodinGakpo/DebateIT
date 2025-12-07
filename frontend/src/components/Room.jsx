@@ -463,7 +463,7 @@ export default function Room() {
               <Sword className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-white font-bold text-lg">Battle Arena</h1>
+              <h1 className="text-white font-bold text-lg">DebateIt</h1>
               <div className="flex items-center gap-2">
                 <p className="text-gray-400 text-sm">Room: {roomCode}</p>
                 <button
