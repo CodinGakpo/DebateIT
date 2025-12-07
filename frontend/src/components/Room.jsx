@@ -616,6 +616,17 @@ export default function Room() {
             const iconBg = isChallenger
               ? "bg-gradient-to-br from-red-500 to-rose-500"
               : "bg-gradient-to-br from-blue-500 to-cyan-500";
+      
+  // Who is speaking on this card?
+  const isCardSpeaking = isSelf ? isSpeaking : isOpponentSpeaking;
+
+  // Violent glow using only Tailwind utilities (no external CSS)
+  const speakingClass = isCardSpeaking
+    ? isChallenger
+      ? "ring-4 ring-red-400 shadow-[0_0_40px_rgba(248,113,113,0.9)] scale-[1.02]"
+      : "ring-4 ring-blue-400 shadow-[0_0_40px_rgba(59,130,246,0.9)] scale-[1.02]"
+    : "";
+
 
             return (
               <div
@@ -623,9 +634,11 @@ export default function Room() {
                 className="relative group rounded-3xl bg-slate-900/80 border border-slate-700/80 overflow-hidden shadow-2xl shadow-black/60"
               >
                 <div
-                  className={`relative overflow-hidden rounded-3xl border-2 ${borderColor} shadow-lg ${glowColor}`}
-                  style={{ aspectRatio: "16/9" }}
-                >
+  className={`relative overflow-hidden rounded-3xl border-2 ${borderColor} shadow-lg ${glowColor} ${speakingClass} transition-all duration-150`}
+  style={{ aspectRatio: "16/9" }}
+>
+
+
                   {/* Video Placeholder */}
                   <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
                     <div
