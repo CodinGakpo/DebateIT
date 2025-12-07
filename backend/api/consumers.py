@@ -6,71 +6,74 @@ from urllib.parse import parse_qs
 from channels.db import database_sync_to_async
 from .models import DebateRoom
 
-
-
 # ---------------------------
 # ROOM CONSUMER
 # ---------------------------
-ROOM_PARTICIPANTS = {}
+ROOM_PARTICIPANTS = {}  # { "room_<code>": { channel_name: participant_dict, ... } }
+
 class RoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.room_code = self.scope['url_route']['kwargs']['room_code']
         self.room_group_name = f"room_{self.room_code}"
 
-        # --- Extract email from query parameters ---
+        # Get email from query
         query_string = self.scope.get("query_string", b"").decode()
         params = parse_qs(query_string)
         email = params.get("email", ["Anonymous"])[0]
-        self.user_name = email  # backend identity
+        self.user_name = email
 
-        # --- Register participant in DB (creates/updates DebateRoom) ---
+        # 1) Determine role in DB (attacker/defender)
         room, role = await register_participant(self.room_code, email)
 
-        if role is None:  # room already has 2 distinct players
+        # 2) If DB says room is full → stop immediately
+        if role is None:
             await self.close()
             return
 
         self.user_role = role
-        self.user_id = self.channel_name  # stable ID
+        self.user_id = self.channel_name
 
-        # --- Track participants per room in memory ---
+        # 3) Load in-memory list
         room_participants = ROOM_PARTICIPANTS.setdefault(self.room_group_name, {})
 
-        # Add participant data before sending room state
+        # Cleanup stale entries
+        stale = [uid for uid, p in room_participants.items() if not p.get("isActive", True)]
+        for uid in stale:
+            room_participants.pop(uid, None)
+
+        # 4) ENFORCE 2-PERSON LIMIT BEFORE ANYTHING ELSE
+        if len(room_participants) >= 2:
+            await self.close()
+            return
+
+        # 5) Add new participant BEFORE accept()
         self.participant = {
             "id": self.user_id,
             "name": self.user_name,
-            "role": self.user_role,  # 🟢 from DB, not join order
-            "isActive": True,
+            "role": self.user_role,
+            "isActive": True
         }
+        room_participants[self.user_id] = self.participant
 
-        # Prevent over 2 participants
-        if len(room_participants) >= 2 and self.user_id not in room_participants:
-            await self.close(code=4001)
-            return
-
-        # Join channel group and accept WebSocket
+        # 6) NOW it is safe to accept websocket
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        # --- Send full room state to THIS user ---
+        # 7) Send room state to this user
         await self.send(json.dumps({
             "type": "room_state",
             "self": self.participant,
             "participants": list(room_participants.values()),
         }))
 
-        # Add to memory AFTER sending local state
-        room_participants[self.user_id] = self.participant
-
-        # --- Announce join to others ---
+        # 8) Announce join to others
         await self.channel_layer.group_send(
             self.room_group_name,
             {
                 "type": "participant_joined",
                 "participant": self.participant,
-                "sender_channel": self.channel_name,
-            },
+                "sender_channel": self.channel_name
+            }
         )
 
     async def disconnect(self, close_code):
@@ -88,10 +91,16 @@ class RoomConsumer(AsyncWebsocketConsumer):
         if room_group is None or user_id is None:
             return
 
-        # Remove from room participant list
+        # Mark this participant inactive in memory (helps in race conditions)
         room_participants = ROOM_PARTICIPANTS.get(room_group, {})
+        pdata = room_participants.get(user_id)
+        if pdata:
+            pdata["isActive"] = False
+
+        # Remove from room participant list
         room_participants.pop(user_id, None)
 
+        # If room empty, remove the room key entirely
         if not room_participants and room_group in ROOM_PARTICIPANTS:
             ROOM_PARTICIPANTS.pop(room_group, None)
 
@@ -111,8 +120,6 @@ class RoomConsumer(AsyncWebsocketConsumer):
             self.channel_name,
         )
 
-
-
     async def receive(self, text_data):
         data = json.loads(text_data)
         message_type = data.get("type")
@@ -124,12 +131,12 @@ class RoomConsumer(AsyncWebsocketConsumer):
                 {
                     'type': 'chat_message_handler',
                     'message': data.get('message'),
-                    # ✅ always use backend name, ignore client "sender"
+                    # always use backend identity; ignore any client-sent sender
                     'sender': self.user_name,
                     'sender_id': self.user_id
                 }
             )
-        
+
         elif message_type == "toggle_audio":
             # Broadcast audio toggle status
             await self.channel_layer.group_send(
@@ -140,7 +147,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
                     'user_id': self.user_id
                 }
             )
-        
+
         elif message_type == "speaking_status":
             # Broadcast speaking status to others
             await self.channel_layer.group_send(
@@ -155,6 +162,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
 
     # Handler for participant_joined
     async def participant_joined(self, event):
+        # don't echo the join back to the joiner
         if event.get("sender_channel") == self.channel_name:
             return
 
@@ -165,6 +173,7 @@ class RoomConsumer(AsyncWebsocketConsumer):
 
     # Handler for participant_left
     async def participant_left(self, event):
+        # send left notification to everyone except the socket that left
         if event['user_id'] != self.user_id:
             await self.send(text_data=json.dumps({
                 'type': 'participant_left',
@@ -193,16 +202,16 @@ class RoomConsumer(AsyncWebsocketConsumer):
 
     # Handler for speaking_status
     async def speaking_status_handler(self, event):
-        # Don't send to self
+        # Don't send to the user who emitted the speaking status
         if event.get('skip_sender') == self.channel_name:
             return
-            
+
+        # We send a simplified payload to the clients; client maps 'opponent'
         await self.send(text_data=json.dumps({
             'type': 'speaking_status',
             'isSpeaking': event['isSpeaking'],
-            'user_id': 'opponent'  # Always 'opponent' for the other person
+            'user_id': 'opponent'
         }))
-
 
 # ---------------------------
 # MATCHMAKING CONSUMER
