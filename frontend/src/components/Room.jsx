@@ -15,9 +15,9 @@ import {
   X,
 } from "lucide-react";
 import useAudioDetection from "../hooks/useAudioDetection";
+import SettingsModal from "../components/SettingsModal";
 
 export default function Room() {
-  
   const { roomCode } = useParams();
   const navigate = useNavigate();
   const socketRef = useRef(null);
@@ -29,7 +29,8 @@ export default function Room() {
   const liveRecognizerRef = useRef(null);
   const currentEmailRef = useRef("You");
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+  const API_BASE =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
   const WS_BASE = import.meta.env.VITE_WS_BASE || "ws://localhost:8000";
 
   const [isMuted, setIsMuted] = useState(false);
@@ -38,6 +39,11 @@ export default function Room() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [message, setMessage] = useState("");
   const [opponentSpeaking, setOpponentSpeaking] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const [isOpponentMuted, setIsOpponentMuted] = useState(false);
+  const [isOpponentSpeaking, setIsOpponentSpeaking] = useState(false);
+
   const [oneMinuteTranscript, setOneMinuteTranscript] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordError, setRecordError] = useState("");
@@ -61,106 +67,103 @@ export default function Room() {
   const isSpeaking = useAudioDetection(isMuted, 30);
 
   useEffect(() => {
-  if (!roomCode) return;
+    if (!roomCode) return;
 
-  // get current user email (or Anonymous)
-  const currentUserEmail =
-    localStorage.getItem("debateitUserEmail") || "Anonymous";
-  currentEmailRef.current = currentUserEmail;
+    // get current user email (or Anonymous)
+    const currentUserEmail =
+      localStorage.getItem("debateitUserEmail") || "Anonymous";
+    currentEmailRef.current = currentUserEmail;
 
-  // close any existing socket first (helps with StrictMode double calls)
-  if (socketRef.current) {
-    try {
-      socketRef.current.close();
-    } catch (e) {
-      console.warn("Error closing existing room socket", e);
-    }
-    socketRef.current = null;
-  }
-
-  // create a new WebSocket
-  const socket = new WebSocket(
-    `${WS_BASE}/ws/room/${roomCode}/?email=${encodeURIComponent(
-      currentUserEmail
-    )}`
-  );
-
-  // store it in the ref
-  socketRef.current = socket;
-
-  // now attach handlers on the *local* socket variable
-  socket.onopen = () => {
-    console.log("Room socket connected");
-  };
-
-  socket.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    console.log("Received message:", data);
-
-   if (data.type === "room_state") {
-  setSelfId(data.self.id);
-
-  // Remove duplicate self entries
-  const others = data.participants.filter(
-    (p) => p.id !== data.self.id
-  );
-
-  // Final participant list = self + the opponent
-  setParticipants([data.self, ...others]);
-}
-else if (data.type === "participant_joined") {
-      setParticipants((prev) => {
-        if (prev.some((p) => p.id === data.participant.id)) return prev;
-return [...prev.filter(p => p.id !== data.participant.id), data.participant];
-      });
-    } else if (data.type === "participant_left") {
-      setParticipants((prev) =>
-        prev.filter((p) => p.id !== data.user_id)
-      );
-    } else if (data.type === "chat_message") {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          sender: data.sender, // opponent’s email
-          text: data.message,
-          timestamp: new Date(),
-          isSystem: false,
-        },
-      ]);
-    } else if (data.type === "audio_status") {
-      setIsOpponentMuted(data.muted);
-    } else if (data.type === "speaking_status") {
-      if (data.user_id === "opponent") {
-        setIsOpponentSpeaking(data.isSpeaking);
+    // close any existing socket first (helps with StrictMode double calls)
+    if (socketRef.current) {
+      try {
+        socketRef.current.close();
+      } catch (e) {
+        console.warn("Error closing existing room socket", e);
       }
-    } else if (data.type === "speech_transcript") {
-      setLiveTranscripts((prev) => ({
-        ...prev,
-        [data.sender || "Opponent"]: data.transcript || "",
-      }));
+      socketRef.current = null;
     }
-  };
 
-  socket.onclose = () => {
-    console.log("Room socket closed");
-  };
+    // create a new WebSocket
+    const socket = new WebSocket(
+      `${WS_BASE}/ws/room/${roomCode}/?email=${encodeURIComponent(
+        currentUserEmail
+      )}`
+    );
 
-  socket.onerror = (err) => {
-    console.error("Room socket error", err);
-  };
+    // store it in the ref
+    socketRef.current = socket;
 
-  // cleanup on unmount / room change
-  return () => {
-    try {
-      socket.close();
-    } catch (e) {
-      console.warn("Error closing room socket on cleanup", e);
-    }
-    socketRef.current = null;
-  };
-}, [roomCode]);
+    // now attach handlers on the *local* socket variable
+    socket.onopen = () => {
+      console.log("Room socket connected");
+    };
 
+    socket.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      console.log("Received message:", data);
+
+      if (data.type === "room_state") {
+        setSelfId(data.self.id);
+
+        // Remove duplicate self entries
+        const others = data.participants.filter((p) => p.id !== data.self.id);
+
+        // Final participant list = self + the opponent
+        setParticipants([data.self, ...others]);
+      } else if (data.type === "participant_joined") {
+        setParticipants((prev) => {
+          if (prev.some((p) => p.id === data.participant.id)) return prev;
+          return [
+            ...prev.filter((p) => p.id !== data.participant.id),
+            data.participant,
+          ];
+        });
+      } else if (data.type === "participant_left") {
+        setParticipants((prev) => prev.filter((p) => p.id !== data.user_id));
+      } else if (data.type === "chat_message") {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            sender: data.sender, // opponent’s email
+            text: data.message,
+            timestamp: new Date(),
+            isSystem: false,
+          },
+        ]);
+      } else if (data.type === "audio_status") {
+        setIsOpponentMuted(data.muted);
+      } else if (data.type === "speaking_status") {
+        if (data.user_id === "opponent") {
+          setIsOpponentSpeaking(data.isSpeaking);
+        }
+      } else if (data.type === "speech_transcript") {
+        setLiveTranscripts((prev) => ({
+          ...prev,
+          [data.sender || "Opponent"]: data.transcript || "",
+        }));
+      }
+    };
+
+    socket.onclose = () => {
+      console.log("Room socket closed");
+    };
+
+    socket.onerror = (err) => {
+      console.error("Room socket error", err);
+    };
+
+    // cleanup on unmount / room change
+    return () => {
+      try {
+        socket.close();
+      } catch (e) {
+        console.warn("Error closing room socket on cleanup", e);
+      }
+      socketRef.current = null;
+    };
+  }, [roomCode]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -270,7 +273,9 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
       recorder.onstop = () => {
         setIsRecording(false);
         clearTimeout(recordingTimeoutRef.current);
-        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
+        const blob = new Blob(recordingChunksRef.current, {
+          type: "audio/webm",
+        });
         recordingChunksRef.current = [];
         stream.getTracks().forEach((t) => t.stop());
         transcribeOneMinute(blob);
@@ -434,6 +439,15 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
         </div>
       )}
 
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        isMuted={isMuted}
+        isSpeaking={isSpeaking}
+        roomCode={roomCode}
+      />
+
       {/* Header */}
       <div className="bg-slate-900/95 backdrop-blur-sm border-b border-purple-500/30 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -583,69 +597,75 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
           showChat ? "lg:pr-[450px]" : ""
         }`}
       >
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-    {/* Participant Video Feeds */}
-    {participants.map((participant) => {
-  const isSelf = participant.id === selfId;
-  const displayName = isSelf ? "You" : (participant.name || "Anonymous");
-  const role = participant.role || "Defender"; // default fallback
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Participant Video Feeds */}
+          {participants.map((participant) => {
+            const isSelf = participant.id === selfId;
+            const displayName = isSelf
+              ? "You"
+              : participant.name || "Anonymous";
+            const role = participant.role || "Defender"; // default fallback
 
-  const isChallenger = role === "Challenger";
-  const borderColor = isChallenger ? "border-red-500" : "border-blue-500";
-  const glowColor = isChallenger ? "shadow-red-500/50" : "shadow-blue-500/50";
-  const iconBg = isChallenger
-    ? "bg-gradient-to-br from-red-500 to-rose-500"
-    : "bg-gradient-to-br from-blue-500 to-cyan-500";
+            const isChallenger = role === "Challenger";
+            const borderColor = isChallenger
+              ? "border-red-500"
+              : "border-blue-500";
+            const glowColor = isChallenger
+              ? "shadow-red-500/50"
+              : "shadow-blue-500/50";
+            const iconBg = isChallenger
+              ? "bg-gradient-to-br from-red-500 to-rose-500"
+              : "bg-gradient-to-br from-blue-500 to-cyan-500";
 
-  return (
-    <div
-      key={participant.id}
-      className="relative group rounded-3xl bg-slate-900/80 border border-slate-700/80 overflow-hidden shadow-2xl shadow-black/60"
-    >
-      <div
-        className={`relative overflow-hidden rounded-3xl border-2 ${borderColor} shadow-lg ${glowColor}`}
-        style={{ aspectRatio: "16/9" }}
-      >
-        {/* Video Placeholder */}
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
-          <div className={`w-24 h-24 rounded-full flex items-center justify-center ${iconBg}`}>
-            {isChallenger ? (
-              <Sword className="w-12 h-12 text-white" />
-            ) : (
-              <Shield className="w-12 h-12 text-white" />
-            )}
-          </div>
-        </div>
-
-        {/* Name + Role Overlay */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-bold">{displayName}</p>
-              <span
-                className={`text-xs px-2 py-0.5 rounded ${
-                  isChallenger
-                    ? "bg-red-500/20 text-red-400 border border-red-500/30"
-                    : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                }`}
+            return (
+              <div
+                key={participant.id}
+                className="relative group rounded-3xl bg-slate-900/80 border border-slate-700/80 overflow-hidden shadow-2xl shadow-black/60"
               >
-                {role}
-              </span>
-            </div>
-            {isMuted && isSelf && (
-              <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
-                <MicOff className="w-4 h-4 text-red-400" />
+                <div
+                  className={`relative overflow-hidden rounded-3xl border-2 ${borderColor} shadow-lg ${glowColor}`}
+                  style={{ aspectRatio: "16/9" }}
+                >
+                  {/* Video Placeholder */}
+                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
+                    <div
+                      className={`w-24 h-24 rounded-full flex items-center justify-center ${iconBg}`}
+                    >
+                      {isChallenger ? (
+                        <Sword className="w-12 h-12 text-white" />
+                      ) : (
+                        <Shield className="w-12 h-12 text-white" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Name + Role Overlay */}
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white font-bold">{displayName}</p>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded ${
+                            isChallenger
+                              ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                              : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                          }`}
+                        >
+                          {role}
+                        </span>
+                      </div>
+                      {isMuted && isSelf && (
+                        <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
+                          <MicOff className="w-4 h-4 text-red-400" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+            );
+          })}
         </div>
-      </div>
-    </div>
-  );
-})}
-
-  </div>
-
 
         {/* Debate Info Panel */}
         <div className="relative group mb-8">
@@ -666,12 +686,14 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
         </div>
 
         {/* One-minute speech capture */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
           <div className="bg-slate-800/70 border border-blue-500/30 rounded-2xl p-6 shadow-lg shadow-blue-500/20">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-white font-bold">One-Minute Speech</h3>
               <button
-                onClick={isRecording ? stopOneMinuteRecording : startOneMinuteRecording}
+                onClick={
+                  isRecording ? stopOneMinuteRecording : startOneMinuteRecording
+                }
                 className={`px-4 py-2 rounded-lg text-white font-semibold transition-all ${
                   isRecording
                     ? "bg-red-500 hover:bg-red-600"
@@ -690,10 +712,13 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
 
             <div className="bg-slate-900/60 border border-blue-500/20 rounded-xl p-4 min-h-[120px]">
               {oneMinuteTranscript ? (
-                <p className="text-white text-sm leading-relaxed">{oneMinuteTranscript}</p>
+                <p className="text-white text-sm leading-relaxed">
+                  {oneMinuteTranscript}
+                </p>
               ) : (
                 <p className="text-sm text-gray-400">
-                  Press Start, speak for up to one minute, then stop to see the transcript.
+                  Press Start, speak for up to one minute, then stop to see the
+                  transcript.
                 </p>
               )}
             </div>
@@ -704,7 +729,9 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-white font-bold">Live Transcription</h3>
               <button
-                onClick={isListening ? stopLiveTranscription : startLiveTranscription}
+                onClick={
+                  isListening ? stopLiveTranscription : startLiveTranscription
+                }
                 className={`px-4 py-2 rounded-lg text-white font-semibold transition-all ${
                   isListening
                     ? "bg-red-500 hover:bg-red-600"
@@ -724,7 +751,8 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
             <div className="bg-slate-900/60 border border-green-500/20 rounded-xl p-4 min-h-[120px] space-y-2 max-h-64 overflow-y-auto">
               {Object.keys(liveTranscripts).length === 0 ? (
                 <p className="text-sm text-gray-400">
-                  Start to stream your speech; transcripts will appear here and broadcast to the room.
+                  Start to stream your speech; transcripts will appear here and
+                  broadcast to the room.
                 </p>
               ) : (
                 Object.entries(liveTranscripts).map(([from, text]) => (
@@ -739,7 +767,6 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
             </div>
           </div>
         </div>
-
       </div>
 
       {/* Control Bar */}
@@ -764,6 +791,7 @@ return [...prev.filter(p => p.id !== data.participant.id), data.participant];
 
           {/* Settings Button */}
           <button
+            onClick={() => setShowSettings(true)}
             className="p-4 rounded-full bg-slate-700 hover:bg-slate-600 text-white transition-all shadow-lg"
             title="Settings"
           >
