@@ -626,6 +626,7 @@ export default function Room() {
       ? "ring-4 ring-red-400 shadow-[0_0_40px_rgba(248,113,113,0.9)] scale-[1.02]"
       : "ring-4 ring-blue-400 shadow-[0_0_40px_rgba(59,130,246,0.9)] scale-[1.02]"
     : "";
+    const isCardMuted = isSelf ? isMuted : isOpponentMuted;
 
 
             return (
@@ -667,11 +668,12 @@ export default function Room() {
                           {role}
                         </span>
                       </div>
-                      {isMuted && isSelf && (
-                        <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
-                          <MicOff className="w-4 h-4 text-red-400" />
-                        </div>
-                      )}
+                      {isCardMuted && (
+  <div className="bg-red-500/20 p-2 rounded-lg border border-red-500/50">
+    <MicOff className="w-4 h-4 text-red-400" />
+  </div>
+)}
+
                     </div>
                   </div>
                 </div>
