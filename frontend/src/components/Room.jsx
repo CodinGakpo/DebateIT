@@ -21,8 +21,16 @@ export default function Room() {
   const { roomCode } = useParams();
   const navigate = useNavigate();
   const socketRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordingChunksRef = useRef([]);
+  const recordingTimeoutRef = useRef(null);
   const chatEndRef = useRef(null);
   const messageInputRef = useRef(null);
+  const liveRecognizerRef = useRef(null);
+  const currentEmailRef = useRef("You");
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+  const WS_BASE = import.meta.env.VITE_WS_BASE || "ws://localhost:8000";
 
   const [isMuted, setIsMuted] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -30,6 +38,12 @@ export default function Room() {
   const [showExitModal, setShowExitModal] = useState(false);
   const [message, setMessage] = useState("");
   const [opponentSpeaking, setOpponentSpeaking] = useState(false);
+  const [oneMinuteTranscript, setOneMinuteTranscript] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordError, setRecordError] = useState("");
+  const [liveTranscripts, setLiveTranscripts] = useState({});
+  const [isListening, setIsListening] = useState(false);
+  const [liveError, setLiveError] = useState("");
   const [chatMessages, setChatMessages] = useState([
     {
       id: 1,
@@ -52,6 +66,7 @@ export default function Room() {
   // get current user email (or Anonymous)
   const currentUserEmail =
     localStorage.getItem("debateitUserEmail") || "Anonymous";
+  currentEmailRef.current = currentUserEmail;
 
   // close any existing socket first (helps with StrictMode double calls)
   if (socketRef.current) {
@@ -65,7 +80,7 @@ export default function Room() {
 
   // create a new WebSocket
   const socket = new WebSocket(
-    `ws://localhost:8000/ws/room/${roomCode}/?email=${encodeURIComponent(
+    `${WS_BASE}/ws/room/${roomCode}/?email=${encodeURIComponent(
       currentUserEmail
     )}`
   );
@@ -82,13 +97,21 @@ export default function Room() {
     const data = JSON.parse(e.data);
     console.log("Received message:", data);
 
-    if (data.type === "room_state") {
-      setSelfId(data.self.id);
-      setParticipants([data.self, ...data.participants]);
-    } else if (data.type === "participant_joined") {
+   if (data.type === "room_state") {
+  setSelfId(data.self.id);
+
+  // Remove duplicate self entries
+  const others = data.participants.filter(
+    (p) => p.id !== data.self.id
+  );
+
+  // Final participant list = self + the opponent
+  setParticipants([data.self, ...others]);
+}
+else if (data.type === "participant_joined") {
       setParticipants((prev) => {
         if (prev.some((p) => p.id === data.participant.id)) return prev;
-        return [...prev, data.participant];
+return [...prev.filter(p => p.id !== data.participant.id), data.participant];
       });
     } else if (data.type === "participant_left") {
       setParticipants((prev) =>
@@ -111,6 +134,11 @@ export default function Room() {
       if (data.user_id === "opponent") {
         setIsOpponentSpeaking(data.isSpeaking);
       }
+    } else if (data.type === "speech_transcript") {
+      setLiveTranscripts((prev) => ({
+        ...prev,
+        [data.sender || "Opponent"]: data.transcript || "",
+      }));
     }
   };
 
@@ -200,6 +228,171 @@ export default function Room() {
       messageInputRef.current?.focus();
     }
   }
+
+  async function transcribeOneMinute(blob) {
+    setRecordError("");
+    try {
+      const form = new FormData();
+      form.append("audio", blob, "speech.webm");
+      form.append("speaker", currentEmailRef.current || "You");
+      form.append("room_code", roomCode || "");
+
+      const res = await fetch(`${API_BASE}/transcribe/`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Transcription failed");
+      }
+      setOneMinuteTranscript(data.transcript || "");
+    } catch (err) {
+      setRecordError(err.message || "Transcription failed");
+    }
+  }
+
+  async function startOneMinuteRecording() {
+    setRecordError("");
+    setOneMinuteTranscript("");
+    recordingChunksRef.current = [];
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordingChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        setIsRecording(false);
+        clearTimeout(recordingTimeoutRef.current);
+        const blob = new Blob(recordingChunksRef.current, { type: "audio/webm" });
+        recordingChunksRef.current = [];
+        stream.getTracks().forEach((t) => t.stop());
+        transcribeOneMinute(blob);
+      };
+
+      recorder.start();
+      setIsRecording(true);
+      recordingTimeoutRef.current = setTimeout(() => {
+        if (recorder.state !== "inactive") {
+          recorder.stop();
+        }
+      }, 60000); // 1 minute limit
+    } catch (err) {
+      setIsRecording(false);
+      setRecordError("Microphone access denied or unavailable.");
+    }
+  }
+
+  function stopOneMinuteRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+    }
+  }
+
+  function startLiveTranscription() {
+    setLiveError("");
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setLiveError("Live transcription not supported in this browser.");
+      return;
+    }
+    const recognizer = new SpeechRecognition();
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+    recognizer.lang = "en-US";
+
+    recognizer.onresult = (event) => {
+      const res = event.results[event.results.length - 1];
+      const text = (res[0]?.transcript || "").trim();
+      if (!text) return;
+
+      const selfLabel = currentEmailRef.current || "You";
+      setLiveTranscripts((prev) => {
+        const existing = prev[selfLabel] || "";
+        const updated = existing ? `${existing} ${text}` : text;
+        return { ...prev, [selfLabel]: updated };
+      });
+
+      if (res.isFinal) {
+        socketRef.current?.send(
+          JSON.stringify({
+            type: "speech_transcript",
+            transcript: text,
+          })
+        );
+      }
+    };
+
+    recognizer.onerror = (e) => {
+      setLiveError(e.error || "Live transcription error");
+      setIsListening(false);
+    };
+    recognizer.onend = () => {
+      // Auto-restart if user didn't explicitly stop
+      if (isListening) {
+        try {
+          recognizer.start();
+        } catch (e) {
+          setIsListening(false);
+          setLiveError("Live transcription stopped.");
+        }
+      }
+    };
+
+    liveRecognizerRef.current = recognizer;
+    setIsListening(true);
+    try {
+      recognizer.start();
+    } catch (err) {
+      setIsListening(false);
+      setLiveError("Unable to start live transcription.");
+    }
+  }
+
+  function stopLiveTranscription() {
+    if (liveRecognizerRef.current) {
+      try {
+        liveRecognizerRef.current.stop();
+      } catch (e) {}
+    }
+    setIsListening(false);
+    // Persist the latest text for "You"
+    const selfLabel = currentEmailRef.current || "You";
+    const text = liveTranscripts[selfLabel];
+    if (text && text.trim()) {
+      fetch(`${API_BASE}/transcribe_text/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          speaker: selfLabel,
+          room_code: roomCode || "",
+        }),
+      }).catch(() => {
+        // ignore errors here to not disrupt UI
+      });
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimeoutRef.current) {
+        clearTimeout(recordingTimeoutRef.current);
+      }
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== "inactive") {
+        recorder.stop();
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
@@ -471,6 +664,82 @@ export default function Room() {
             </div>
           </div>
         </div>
+
+        {/* One-minute speech capture */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div className="bg-slate-800/70 border border-blue-500/30 rounded-2xl p-6 shadow-lg shadow-blue-500/20">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold">One-Minute Speech</h3>
+              <button
+                onClick={isRecording ? stopOneMinuteRecording : startOneMinuteRecording}
+                className={`px-4 py-2 rounded-lg text-white font-semibold transition-all ${
+                  isRecording
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {isRecording ? "Stop" : "Start"}
+              </button>
+            </div>
+
+            {recordError && (
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
+                {recordError}
+              </div>
+            )}
+
+            <div className="bg-slate-900/60 border border-blue-500/20 rounded-xl p-4 min-h-[120px]">
+              {oneMinuteTranscript ? (
+                <p className="text-white text-sm leading-relaxed">{oneMinuteTranscript}</p>
+              ) : (
+                <p className="text-sm text-gray-400">
+                  Press Start, speak for up to one minute, then stop to see the transcript.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Live transcription */}
+          <div className="bg-slate-800/70 border border-green-500/30 rounded-2xl p-6 shadow-lg shadow-green-500/20">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold">Live Transcription</h3>
+              <button
+                onClick={isListening ? stopLiveTranscription : startLiveTranscription}
+                className={`px-4 py-2 rounded-lg text-white font-semibold transition-all ${
+                  isListening
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-green-600 hover:bg-green-700"
+                }`}
+              >
+                {isListening ? "Stop" : "Start"}
+              </button>
+            </div>
+
+            {liveError && (
+              <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-3">
+                {liveError}
+              </div>
+            )}
+
+            <div className="bg-slate-900/60 border border-green-500/20 rounded-xl p-4 min-h-[120px] space-y-2 max-h-64 overflow-y-auto">
+              {Object.keys(liveTranscripts).length === 0 ? (
+                <p className="text-sm text-gray-400">
+                  Start to stream your speech; transcripts will appear here and broadcast to the room.
+                </p>
+              ) : (
+                Object.entries(liveTranscripts).map(([from, text]) => (
+                  <div key={from} className="text-sm">
+                    <span className="font-semibold text-green-300 mr-2">
+                      {from === currentEmailRef.current ? "You" : from}:
+                    </span>
+                    <span className="text-white">{text}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
       </div>
 
       {/* Control Bar */}

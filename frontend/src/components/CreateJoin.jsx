@@ -1,25 +1,89 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Swords, Users, Plus, ArrowRight, Sparkles, Home, X } from "lucide-react";
+import { useKindeAuth } from "@kinde-oss/kinde-auth-react";
+import { Swords, Users, Plus, ArrowRight, Sparkles, Home } from "lucide-react";
 
 export default function CreateJoin() {
   const [roomCode, setRoomCode] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const { user, getToken } = useKindeAuth();
   const navigate = useNavigate();
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
-  function createRoom() {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    navigate(`/room/${code}`);
+  async function createRoom() {
+    setError("");
+    if (!user?.email) {
+      setError("Login required before creating a room.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_BASE}/rooms/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ email: user.email }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Unable to create room");
+      }
+
+      localStorage.setItem("debateitUserEmail", user.email);
+      navigate(`/room/${data.roomCode}`);
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function joinRoom() {
-    if (roomCode.trim()) {
-      navigate(`/room/${roomCode.toUpperCase()}`);
+  async function joinRoom() {
+    setError("");
+    if (!roomCode.trim()) return;
+    if (!user?.email) {
+      setError("Login required before joining a room.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(
+        `${API_BASE}/rooms/${roomCode.trim().toUpperCase()}/join/`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ email: user.email }),
+        }
+      );
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Unable to join room");
+      }
+
+      localStorage.setItem("debateitUserEmail", user.email);
+      navigate(`/room/${data.roomCode}`);
+    } catch (err) {
+      setError(err.message || "Something went wrong");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
   function handleKeyPress(e) {
-    if (e.key === 'Enter' && roomCode.trim()) {
+    if (e.key === "Enter" && roomCode.trim()) {
       joinRoom();
     }
   }
@@ -105,12 +169,13 @@ export default function CreateJoin() {
                 Start a new debate arena and invite your opponents
               </p>
               
-              <button
-                onClick={createRoom}
-                className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-purple-500/50 flex items-center justify-center gap-2 group"
+                <button
+                  onClick={createRoom}
+                  disabled={isSubmitting}
+                  className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-purple-500/50 flex items-center justify-center gap-2 group"
               >
                 <Sparkles className="w-5 h-5" />
-                Create New Room
+                {isSubmitting ? "Working..." : "Create New Room"}
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
@@ -142,13 +207,18 @@ export default function CreateJoin() {
                 
                 <button
                   onClick={joinRoom}
-                  disabled={!roomCode.trim()}
+                  disabled={!roomCode.trim() || isSubmitting}
                   className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 disabled:from-gray-600 disabled:to-gray-700 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-blue-500/50 flex items-center justify-center gap-2 group"
                 >
-                  Join Battle
+                  {isSubmitting ? "Working..." : "Join Battle"}
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </button>
               </div>
+              {error && (
+                <p className="text-sm text-red-400 text-center mt-3">
+                  {error}
+                </p>
+              )}
             </div>
           </div>
         </div>
